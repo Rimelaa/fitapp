@@ -44,6 +44,12 @@
   .ex-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
   .ex-name{font-weight:600;font-size:14px}
   .ex a{color:var(--blue);text-decoration:none;font-size:12px;white-space:nowrap}
+  .vidbtn{background:var(--surface2);border:1px solid var(--line);color:var(--blue);border-radius:10px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .vidbtn:active{border-color:var(--blue)}
+  .vidwrap{margin-top:10px;overflow:hidden;animation:slideDown .35s ease}
+  .vidratio{position:relative;padding-top:56.25%;border-radius:12px;overflow:hidden}
+  .vidratio iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
   .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(52,211,153,.15);color:var(--accent);margin-top:4px}
   .sets{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
   .set{display:flex;flex-direction:column;align-items:center;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:6px 4px;flex:1;min-width:64px}
@@ -129,7 +135,29 @@
     <div class="search"><input type="text" id="foodSearch" placeholder="Поиск: творог, курица, овсянка…" oninput="renderDB()"></div>
     <div class="dblist" id="dbList"></div>
     <details>
-      <summary>＋ Своё блюдо (если нет в базе)</summary>
+      <summary>🌐 Найти в интернете (Open Food Facts)</summary>
+      <div style="margin-top:8px">
+        <div class="row" style="margin-bottom:8px">
+          <input type="text" id="netQuery" placeholder="Продукт или бренд: бигмак, доширак…" oninput="netSearchDebounced()">
+          <button class="btn secondary" style="flex:0 0 auto;padding:10px 14px" onclick="netSearch(true)">Найти</button>
+        </div>
+        <div id="netStatus" class="muted small" style="margin-bottom:6px"></div>
+        <div class="dblist" id="netList" style="max-height:230px"></div>
+      </div>
+    </details>
+    <details>
+      <summary>🏠 Приготовил сам — оценить по описанию</summary>
+      <div style="margin-top:8px">
+        <input type="text" id="homeDesc" placeholder="Что приготовил: курица с рисом, омлет…" style="margin-bottom:8px">
+        <div class="row" style="margin-bottom:8px">
+          <input type="number" id="homeGrams" placeholder="Примерно грамм">
+          <button class="btn" style="flex:0 0 auto;padding:10px 14px" onclick="estimateHome()">Оценить и добавить</button>
+        </div>
+        <div id="homeResult" class="muted small"></div>
+      </div>
+    </details>
+    <details>
+      <summary>＋ Своё блюдо (если знаешь КБЖУ точно)</summary>
       <div style="margin-top:8px">
         <input type="text" id="cName" placeholder="Название" style="margin-bottom:8px">
         <div class="row" style="margin-bottom:8px">
@@ -220,7 +248,7 @@
 const PROGRAM = {
   1:{title:'Понедельник — Верх A: грудь (жимы)', ex:[
     {id:'floorpress', n:'Жим гантелей лёжа на полу', u:'https://www.youtube.com/watch?v=8-_7q2qutk4', s:4, r:[8,10]},
-    {id:'pullups', n:'Подтягивания прямым хватом', u:'', s:3, r:[8,99], note:'максимум; пока мало — негативы 4–5 сек'},
+    {id:'pullups', n:'Подтягивания прямым хватом', u:'https://www.youtube.com/watch?v=dYmMKmit4qI', s:3, r:[8,99], note:'максимум; пока мало — негативы 4–5 сек'},
     {id:'pushupw', n:'Отжимания с отягощением (рюкзак)', u:'https://www.youtube.com/watch?v=vO0ItS53Jno', s:3, r:[8,12]},
     {id:'ohp', n:'Армейский жим гантелей сидя', u:'https://www.youtube.com/watch?v=V-_WtQzZgwM', s:3, r:[8,10]},
     {id:'reardelt', n:'Разведения в наклоне (задняя дельта)', u:'https://www.youtube.com/watch?v=bXJ9aM-NCpE', s:3, r:[15,15]},
@@ -230,17 +258,17 @@ const PROGRAM = {
   3:{title:'Среда — Низ + кор', ex:[
     {id:'squat', n:'Приседания с гантелями', u:'https://www.youtube.com/watch?v=UIcvBlo5Iqg', s:4, r:[10,12]},
     {id:'bulgarian', n:'Болгарские сплит-приседания', u:'https://www.youtube.com/watch?v=6fOOCDSV04k', s:3, r:[8,10], note:'на ногу'},
-    {id:'rdl', n:'Румынская тяга с гантелями', u:'', s:4, r:[10,12]},
+    {id:'rdl', n:'Румынская тяга с гантелями', u:'https://www.youtube.com/watch?v=w8618QnyZi8', s:4, r:[10,12]},
     {id:'calves', n:'Подъёмы на носки стоя', u:'https://www.youtube.com/watch?v=rOQ9GjU8SWo', s:4, r:[15,20]},
     {id:'abwheel', n:'Колесо для пресса с колен', u:'https://www.youtube.com/watch?v=mRm0jWrNcRc', s:4, r:[8,10]},
     {id:'deadbug', n:'Мёртвый жук', u:'https://www.youtube.com/watch?v=_E7Vg4ECFYA', s:3, r:[10,12], note:'на сторону'}
   ]},
   5:{title:'Пятница — Верх B: грудь (разводки) + плечи, руки', ex:[
-    {id:'widepush', n:'Отжимания широким хватом', u:'', s:4, r:[8,12]},
-    {id:'floorfly', n:'Разводки гантелей лёжа на полу', u:'', s:3, r:[10,12]},
+    {id:'widepush', n:'Отжимания широким хватом', u:'https://www.youtube.com/watch?v=VJx7Ql80ec8', s:4, r:[8,12]},
+    {id:'floorfly', n:'Разводки гантелей лёжа на полу', u:'https://www.youtube.com/watch?v=X2iQGqLgeBI', s:3, r:[10,12]},
     {id:'pullover', n:'Пуловер с гантелью лёжа', u:'https://www.youtube.com/watch?v=LJhN8d7ZAPQ', s:3, r:[10,12]},
     {id:'latraise', n:'Махи гантелями через стороны', u:'https://www.youtube.com/watch?v=Q3j7XYxrJtk', s:4, r:[12,15]},
-    {id:'chinups', n:'Подтягивания обратным хватом', u:'', s:3, r:[8,99], note:'максимум'},
+    {id:'chinups', n:'Подтягивания обратным хватом', u:'https://www.youtube.com/watch?v=bF4T6-Mh0MU', s:3, r:[8,99], note:'максимум'},
     {id:'shrugs', n:'Шраги с гантелями', u:'https://www.youtube.com/watch?v=uKNhIageiWU', s:3, r:[12,15]},
     {id:'skull', n:'Французский жим лёжа', u:'https://www.youtube.com/watch?v=9GBpsRgbxEg', s:3, r:[10,12]},
     {id:'hammer', n:'Молотковые сгибания', u:'https://www.youtube.com/watch?v=k6VRiS8AY2o', s:3, r:[10,12]}
@@ -338,9 +366,11 @@ function renderWorkout(){
   day.ex.forEach((ex,i)=>{
     const prev=lastEntry(ex.id);
     const badge=topReached(ex,prev&&prev.sets)?'<span class="badge">Прошлый раз — верх диапазона → +'+S.settings.step+' кг!</span>':'';
+    const vid=ex.u?ex.u.split('v=')[1]:null;
     h+='<div class="card"><div class="ex"><div class="ex-top"><div class="ex-name">'+(i+1)+'. '+ex.n+(ex.note?'<div class="muted small">'+ex.note+'</div>':'')+badge+'</div>';
-    if(ex.u)h+='<a href="'+ex.u+'" target="_blank">видео ▶</a>';
+    if(vid)h+='<button class="vidbtn" data-vid="'+ex.id+'">▶ видео</button>';
     h+='</div><div class="muted small">'+ex.s+' × '+ex.r[0]+(ex.r[1]>=99?'':('–'+ex.r[1]))+(ex.unit||' повторов')+'</div>';
+    if(vid)h+='<div class="vidwrap" id="vid-'+ex.id+'" style="display:none"><div class="vidratio"><iframe data-src="https://www.youtube-nocookie.com/embed/'+vid+'" allowfullscreen loading="lazy"></iframe></div></div>';
     h+='<div class="sets">';
     for(let s=0;s<ex.s;s++){
       const pv=prev&&prev.sets[s]?prev.sets[s]:null;
@@ -352,6 +382,17 @@ function renderWorkout(){
     h+='</div></div></div>';
   });
   box.innerHTML=h;
+  document.querySelectorAll('.vidbtn').forEach(b=>{
+    b.onclick=()=>{
+      const wrap=document.getElementById('vid-'+b.dataset.vid);
+      const open=wrap.style.display!=='none';
+      // закрыть все остальные
+      document.querySelectorAll('.vidwrap').forEach(w=>{if(w!==wrap){w.style.display='none';const f=w.querySelector('iframe');if(f&&f.src)f.src='';}});
+      wrap.style.display=open?'none':'block';
+      if(!open){const f=wrap.querySelector('iframe');if(f&&!f.src)f.src=f.dataset.src;}
+      b.textContent=open?'▶ видео':'✕ закрыть';
+    };
+  });
   document.getElementById('saveMsg').textContent='';
 }
 
@@ -401,6 +442,83 @@ function addCustomFood(){
   S.customFoods.push({n:n,k:k,p:p});save();
   document.getElementById('cName').value='';document.getElementById('cKcal').value='';document.getElementById('cProt').value='';
   renderDB();toast('Добавлено в базу');
+}
+
+/* ---- Интернет-поиск: Open Food Facts ---- */
+let netTimer=null;
+function netSearchDebounced(){clearTimeout(netTimer);netTimer=setTimeout(()=>netSearch(false),600);}
+async function netSearch(manual){
+  const q=document.getElementById('netQuery').value.trim();
+  const st=document.getElementById('netStatus'),list=document.getElementById('netList');
+  if(!q){if(manual)toast('Введи название продукта');return;}
+  st.textContent='Ищу «'+q+'» в открытой базе…';list.innerHTML='';
+  const api='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+
+    '&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,quantity';
+  let d=null;
+  try{ // прямой запрос (работает с https-сайта)
+    const r=await fetch(api);d=await r.json();
+  }catch(e){ // запасной маршрут через прокси (для http/локального файла)
+    try{
+      const r2=await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(api));
+      d=await r2.json();
+    }catch(e2){st.textContent='Нет соединения с Open Food Facts. Проверь интернет или добавь вручную.';return;}
+  }
+  const items=(d.products||[]).filter(p=>p.product_name&&p.nutriments&&p.nutriments['energy-kcal_100g']!=null);
+  if(!items.length){st.textContent='Ничего не нашлось в Open Food Facts. Попробуй другое название или добавь вручную.';return;}
+  st.textContent='Найдено: '+items.length+'. Нажми на строку, чтобы добавить (спросит граммовку).';
+  list.innerHTML='';
+  items.slice(0,15).forEach(p=>{
+    const k=Math.round(p.nutriments['energy-kcal_100g']);
+    const prot=+(p.nutriments.proteins_100g||0).toFixed(1);
+    const name=(p.product_name+(p.brands?' · '+p.brands:'')).slice(0,60);
+    const div=document.createElement('div');div.className='dbitem';
+    div.innerHTML='<div class="n">'+esc(name)+'</div><div class="k">'+k+' ккал · '+prot+' г / 100 г</div>';
+    div.onclick=()=>addFoodEntry({n:name,k:k,p:prot});
+    list.appendChild(div);
+  });
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ---- Домашняя еда: оценка по описанию ---- */
+const HOME_RULES=[
+ {re:/куриц|курин|филе/i,n:'Курица (жареная/запечённая)',k:190,p:29},
+ {re:/говядин|свинин|мясо/i,n:'Мясо (жареное/тушёное)',k:250,p:26},
+ {re:/котлет/i,n:'Котлеты',k:220,p:15},
+ {re:/рыб|лосос|минтай|треск|горбуш/i,n:'Рыба (запечённая/жареная)',k:160,p:20},
+ {re:/яичниц|омлет|яйц/i,n:'Омлет / яичница',k:180,p:12},
+ {re:/суп/i,n:'Суп (средний)',k:60,p:3.5},
+ {re:/борщ/i,n:'Борщ',k:49,p:2.6},
+ {re:/пельмен/i,n:'Пельмени',k:275,p:12},
+ {re:/макарон|паст/i,n:'Макароны (готовые)',k:135,p:4.5},
+ {re:/рис/i,n:'Рис (готовый)',k:116,p:2.2},
+ {re:/гречк/i,n:'Гречка (готовая)',k:110,p:4.2},
+ {re:/картошк|пюре/i,n:'Картошка (готовая)',k:106,p:2},
+ {re:/оладь|блин/i,n:'Оладьи/блины',k:190,p:5},
+ {re:/творог/i,n:'Творог',k:121,p:17},
+ {re:/салат/i,n:'Салат с маслом',k:90,p:1.5},
+ {re:/каш/i,n:'Каша (средняя)',k:100,p:3},
+ {re:/бутерброд|сэндвич/i,n:'Бутерброд с маслом/сыром',k:250,p:8},
+ {re:/пицц/i,n:'Пицца',k:266,p:11},
+ {re:/бургер|гамбургер|бигмак|чизбургер/i,n:'Бургер (средний)',k:280,p:13},
+ {re:/суш|ролл/i,n:'Суши/роллы',k:150,p:6},
+ {re:/шаверм|шаурм/i,n:'Шаурма',k:200,p:10},
+ {re:/сосиск|колбас|ветчин/i,n:'Колбасные изделия',k:280,p:13},
+ {re:/сырник/i,n:'Сырники',k:220,p:15},
+ {re:/запеканк/i,n:'Запеканка',k:180,p:9}
+];
+function estimateHome(){
+  const desc=document.getElementById('homeDesc').value.trim();
+  const g=+document.getElementById('homeGrams').value;
+  const res=document.getElementById('homeResult');
+  if(!desc||!g){res.textContent='Напиши блюдо и примерную граммовку.';return;}
+  const rule=HOME_RULES.find(r=>r.re.test(desc));
+  if(!rule){res.textContent='Не распознал блюдо «'+desc+'». Добавь вручную через «Своё блюдо» — это точнее.';return;}
+  const k=Math.round(rule.k*g/100),p=+(rule.p*g/100).toFixed(1);
+  if(!S.food[today()])S.food[today()]=[];
+  S.food[today()].push({n:rule.n+' (домашнее)',g:g,k:k,p:p});
+  save();renderFood();
+  res.textContent='✓ '+rule.n+', '+g+' г ≈ '+k+' ккал, белок '+p+' г — добавлено.';
+  document.getElementById('homeDesc').value='';document.getElementById('homeGrams').value='';
 }
 function renderFood(){
   const k=today();
