@@ -12,89 +12,96 @@
     --bg:#0f1115; --surface:#191c23; --surface2:#22262f; --line:#2c313c;
     --text:#e7eaf0; --muted:#8b93a3; --accent:#34d399; --accent-dim:#1d5c46;
     --warn:#fbbf24; --bad:#f87171; --blue:#60a5fa;
+    /* единая шкала размеров (iPhone 15 Pro, 393×852) */
+    --r-lg:16px; --r-md:12px; --ctl-h:48px; --ctl-h-sm:38px;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     font-size:16px; overscroll-behavior-y:none}
-  body{padding-bottom:76px}
-  h1{font-size:20px;margin:0}
-  .app{max-width:520px;margin:0 auto;padding:0 14px}
-  header{padding:calc(env(safe-area-inset-top) + 14px) 0 10px;display:flex;align-items:baseline;justify-content:space-between}
+  body{padding-bottom:calc(env(safe-area-inset-bottom) + 84px)}
+  h1{font-size:22px;margin:0}
+  .app{max-width:520px;margin:0 auto;padding:0 16px}
+  header{padding:calc(env(safe-area-inset-top) + 14px) 0 12px;display:flex;align-items:baseline;justify-content:space-between}
   header .date{color:var(--muted);font-size:13px}
-  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
-  .card h3{margin:0 0 8px;font-size:15px}
-  .muted{color:var(--muted);font-size:13px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px;margin-bottom:12px}
+  .card h3{margin:0 0 10px;font-size:16px;font-weight:700}
+  .muted{color:var(--muted);font-size:13px;line-height:1.45}
   .small{font-size:12px}
   /* tabs */
   nav{position:fixed;bottom:0;left:0;right:0;background:rgba(20,22,28,.92);
     backdrop-filter:blur(12px);border-top:1px solid var(--line);
     display:flex;justify-content:space-around;padding:8px 0 calc(env(safe-area-inset-bottom) + 8px);z-index:50}
-  nav button{background:none;border:none;color:var(--muted);font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px;width:70px;cursor:pointer}
-  nav button .ic{font-size:20px;line-height:1}
+  nav button{background:none;border:none;color:var(--muted);font-size:12px;display:flex;flex-direction:column;align-items:center;gap:3px;width:76px;cursor:pointer}
+  nav button .ic{font-size:22px;line-height:1}
   nav button.active{color:var(--accent)}
   section{display:none}
   section.active{display:block}
   /* pills */
-  .pills{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
-  .pill{padding:8px 14px;border-radius:20px;background:var(--surface);border:1px solid var(--line);color:var(--muted);font-size:13px;cursor:pointer}
+  .pills{display:flex;gap:8px;margin-bottom:12px}
+  .pill{flex:1;padding:10px 0;border-radius:22px;background:var(--surface);border:1px solid var(--line);color:var(--muted);font-size:15px;text-align:center;cursor:pointer;min-height:var(--ctl-h-sm)}
   .pill.active{background:var(--accent-dim);border-color:var(--accent);color:var(--text)}
   /* exercise */
-  .ex{margin-bottom:14px}
-  .ex-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
-  .ex-name{font-weight:600;font-size:14px}
-  .ex a{color:var(--blue);text-decoration:none;font-size:12px;white-space:nowrap}
-  .vidbtn{background:var(--surface2);border:1px solid var(--line);color:var(--blue);border-radius:10px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .ex{margin-bottom:4px}
+  .ex-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .ex-name{font-weight:600;font-size:16px;line-height:1.35}
+  .ex a{color:var(--blue);text-decoration:none;font-size:13px;white-space:nowrap}
+  .vidbtn{background:var(--surface2);border:1px solid var(--line);color:var(--blue);border-radius:var(--r-md);padding:8px 14px;font-size:14px;min-height:var(--ctl-h-sm);cursor:pointer;white-space:nowrap;flex-shrink:0}
   .vidbtn:active{border-color:var(--blue)}
   .vidwrap{margin-top:10px;overflow:hidden;animation:slideDown .35s ease}
-  .vidratio{position:relative;padding-top:56.25%;border-radius:12px;overflow:hidden}
+  .vidratio{position:relative;padding-top:56.25%;border-radius:var(--r-md);overflow:hidden}
   .vidratio iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
   @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
-  .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(52,211,153,.15);color:var(--accent);margin-top:4px}
-  .sets{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-  .set{display:flex;flex-direction:column;align-items:center;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:6px 4px;flex:1;min-width:64px}
-  .set label{font-size:10px;color:var(--muted)}
-  .set input{width:100%;background:none;border:none;color:var(--text);text-align:center;font-size:16px;outline:none}
-  .btn{display:inline-block;background:var(--accent);color:#08110c;border:none;border-radius:12px;padding:12px 18px;font-size:15px;font-weight:600;cursor:pointer;width:100%}
+  .badge{display:inline-block;font-size:12px;padding:3px 10px;border-radius:12px;background:rgba(52,211,153,.15);color:var(--accent);margin-top:6px}
+  .sets{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .set{display:flex;flex-direction:column;align-items:center;background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-md);padding:8px 4px;flex:1;min-width:66px}
+  .set label{font-size:11px;color:var(--muted)}
+  .set input{width:100%;background:none;border:none;color:var(--text);text-align:center;font-size:17px;outline:none;min-height:30px}
+  /* кнопки и поля — одна высота 48px, один шрифт 16px (без iOS-зума) */
+  .btn{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:#08110c;border:none;border-radius:var(--r-md);padding:0 18px;font-size:16px;font-weight:600;cursor:pointer;width:100%;min-height:var(--ctl-h)}
   .btn.secondary{background:var(--surface2);color:var(--text);border:1px solid var(--line)}
   .btn.danger{background:none;border:1px solid var(--bad);color:var(--bad)}
+  input[type=text],input[type=number],select{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-md);color:var(--text);padding:0 14px;font-size:16px;outline:none;width:100%;min-height:var(--ctl-h);-webkit-appearance:none;appearance:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  input::placeholder{color:#5d6575}
   /* ring */
-  .ringrow{display:flex;align-items:center;gap:14px}
-  .ring{position:relative;width:110px;height:110px;flex-shrink:0}
+  .ringrow{display:flex;align-items:center;gap:16px}
+  .ring{position:relative;width:112px;height:112px;flex-shrink:0}
   .ring .val{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-  .ring .val b{font-size:22px}
-  .ring .val span{font-size:10px;color:var(--muted)}
-  .bars{flex:1}
-  .bar{margin-bottom:10px}
-  .bar .t{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
-  .bar .t span:last-child{color:var(--muted)}
+  .ring .val b{font-size:24px}
+  .ring .val span{font-size:11px;color:var(--muted)}
+  .bars{flex:1;min-width:0}
+  .bar{margin-bottom:12px}
+  .bar:last-child{margin-bottom:0}
+  .bar .t{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
+  .bar .t span:last-child{color:var(--muted);white-space:nowrap}
   .track{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden}
   .fill{height:100%;border-radius:4px;background:var(--accent)}
   .fill.warn{background:var(--warn)} .fill.bad{background:var(--bad)}
-  /* food list */
-  .fitem{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);gap:8px}
+  /* списки */
+  .fitem{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);gap:10px}
   .fitem:last-child{border-bottom:none}
-  .fitem .n{font-size:14px}
-  .fitem .g{font-size:12px;color:var(--muted)}
-  .fitem .k{font-size:13px;white-space:nowrap}
-  .fitem button{background:none;border:none;color:var(--bad);font-size:16px;cursor:pointer;padding:4px}
-  input[type=text],input[type=number],select{background:var(--surface2);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:10px 12px;font-size:15px;outline:none;width:100%}
-  input:focus{border-color:var(--accent)}
-  .search{margin-bottom:8px}
-  .search input{font-size:17px;padding:14px 16px;border-radius:14px;min-height:50px}
-  .dblist{max-height:230px;overflow-y:auto}
-  .dbitem{padding:9px 4px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .fitem .n{font-size:15px;line-height:1.35}
+  .fitem .g{font-size:13px;color:var(--muted)}
+  .fitem .k{font-size:14px;white-space:nowrap}
+  .fitem button{background:none;border:none;color:var(--bad);font-size:18px;cursor:pointer;padding:8px;min-height:var(--ctl-h-sm);min-width:var(--ctl-h-sm)}
+  .search{margin-bottom:10px}
+  .search input{font-size:17px;min-height:52px;border-radius:14px;padding:0 16px}
+  .dblist{max-height:240px;overflow-y:auto}
+  .dbitem{padding:12px 4px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center;min-height:52px}
   .dbitem:last-child{border-bottom:none}
-  .dbitem .k{color:var(--muted);font-size:12px;white-space:nowrap}
-  .row{display:flex;gap:8px;align-items:center}
-  .row>*{flex:1}
+  .dbitem .n{font-size:15px;line-height:1.35}
+  .dbitem .g{font-size:12px;color:var(--muted)}
+  .dbitem .k{color:var(--muted);font-size:13px;white-space:nowrap;text-align:right}
+  .row{display:flex;gap:8px;align-items:stretch}
+  .row>*{flex:1;min-width:0}
   .chart{width:100%;height:180px}
   .stat{display:flex;gap:10px;margin-bottom:12px}
-  .stat .tile{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;text-align:center}
-  .stat .tile b{font-size:20px;display:block}
-  .stat .tile span{font-size:11px;color:var(--muted)}
-  details summary{cursor:pointer;color:var(--blue);font-size:14px;padding:6px 0}
-  .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--accent);color:#08110c;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99}
+  .stat .tile{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 6px;text-align:center}
+  .stat .tile b{font-size:19px;display:block}
+  .stat .tile span{font-size:12px;color:var(--muted)}
+  details summary{cursor:pointer;color:var(--blue);font-size:15px;padding:10px 0;min-height:var(--ctl-h-sm);display:flex;align-items:center}
+  .toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--accent);color:#08110c;padding:12px 22px;border-radius:22px;font-size:15px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99;max-width:88vw;text-align:center}
   .toast.show{opacity:1}
   .ok{color:var(--accent)} .wr{color:var(--warn)} .bd{color:var(--bad)}
 </style>
@@ -200,13 +207,16 @@
 
   <div class="card">
     <h3>Claude API — поиск любой еды</h3>
-    <p class="muted small">Вставь свой ключ с console.anthropic.com — поиск найдёт КБЖУ чего угодно: фастфуд, блюда ресторанов, домашняя еда. Ключ хранится только на твоём телефоне, в код сайта не попадает.</p>
-    <input type="text" id="setClaudeKey" placeholder="sk-ant-..." style="margin-bottom:8px">
-    <div class="row">
-      <button class="btn secondary" onclick="saveClaudeKey()">Сохранить ключ</button>
-      <button class="btn secondary" onclick="removeClaudeKey()">Удалить</button>
+    <p class="muted small">Поиск найдёт КБЖУ чего угодно: фастфуд, рестораны, домашняя еда. Ключ хранится только на твоём телефоне.</p>
+    <div style="margin-bottom:8px"><label class="muted small">Base URL</label>
+      <input type="text" id="setClaudeUrl" placeholder="https://api.nixway.xyz"></div>
+    <div style="margin-bottom:8px"><label class="muted small">Ключ (AUTH_TOKEN)</label>
+      <input type="text" id="setClaudeKey" placeholder="sk-... / ВАШ_КЛЮЧ" autocomplete="off"></div>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn secondary" onclick="saveClaudeCfg()">Сохранить</button>
+      <button class="btn secondary" onclick="testClaudeCfg()">Проверить</button>
     </div>
-    <div id="claudeStatus" class="muted small" style="margin-top:6px"></div>
+    <div id="claudeStatus" class="muted small"></div>
   </div>
 
   <div class="card">
@@ -423,18 +433,17 @@ function renderSearch(){
 let aiTimer=null,aiController=null;
 function aiSearch(q){clearTimeout(aiTimer);aiTimer=setTimeout(()=>doAiSearch(q),700);}
 async function doAiSearch(q){
-  if(!S.settings.claudeKey){aiStatus('💡 Введи ключ в Настройках → «Claude API», и поиск найдёт вообще всё. Пока работает только локальная база.');return;}
+  if(!S.settings.claudeKey||!S.settings.claudeUrl){aiStatus('💡 Настрой Claude API в Настройках — и поиск найдёт вообще всё. Пока работает только локальная база.');return;}
   if(aiController)aiController.abort();
   aiController=new AbortController();
   aiStatus('🤔 Спрашиваю Claude про «'+q+'»…');
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{
+    const r=await fetch(S.settings.claudeUrl+'/v1/messages',{
       method:'POST',
       headers:{
         'content-type':'application/json',
-        'x-api-key':S.settings.claudeKey,
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'
+        'authorization':'Bearer '+S.settings.claudeKey,
+        'anthropic-version':'2023-06-01'
       },
       signal:aiController.signal,
       body:JSON.stringify({
@@ -649,22 +658,36 @@ function loadSettingsUI(){
   document.getElementById('setProt').value=S.settings.prot;
   document.getElementById('setGoal').value=S.settings.goal;
   document.getElementById('setStep').value=S.settings.step;
-  const hasKey=!!S.settings.claudeKey;
-  document.getElementById('claudeStatus').textContent=hasKey?'✓ Ключ сохранён, поиск любой еды активен.':'Ключ не задан — работает только локальная база.';
+  document.getElementById('setClaudeUrl').value=S.settings.claudeUrl||'';
+  document.getElementById('setClaudeKey').value=S.settings.claudeKey||'';
+  updClaudeStatus();
 }
-function saveClaudeKey(){
-  const v=document.getElementById('setClaudeKey').value.trim();
-  if(!v){toast('Вставь ключ');return;}
-  if(!v.startsWith('sk-ant-')){if(!confirm('Ключ обычно начинается с sk-ant-. Всё равно сохранить?'))return;}
-  S.settings.claudeKey=v;save();
-  document.getElementById('setClaudeKey').value='';
-  document.getElementById('claudeStatus').textContent='✓ Ключ сохранён, поиск любой еды активен.';
-  toast('Ключ сохранён ✓');
+function updClaudeStatus(){
+  const ok=!!(S.settings.claudeUrl&&S.settings.claudeKey);
+  document.getElementById('claudeStatus').textContent=ok
+    ?'✓ Настроено: '+S.settings.claudeUrl.replace(/^https?:\/\//,'')
+    :'Не настроено — работает только локальная база.';
 }
-function removeClaudeKey(){
-  delete S.settings.claudeKey;save();
-  document.getElementById('claudeStatus').textContent='Ключ удалён.';
-  toast('Ключ удалён');
+function saveClaudeCfg(){
+  const u=document.getElementById('setClaudeUrl').value.trim().replace(/\/+$/,'');
+  const k=document.getElementById('setClaudeKey').value.trim();
+  if(!u||!k){toast('Нужны и URL, и ключ');return;}
+  if(!u.startsWith('http')){toast('URL должен начинаться с https://');return;}
+  S.settings.claudeUrl=u;S.settings.claudeKey=k;save();updClaudeStatus();toast('Сохранено ✓');
+}
+async function testClaudeCfg(){
+  const st=document.getElementById('claudeStatus');
+  if(!S.settings.claudeUrl||!S.settings.claudeKey){st.textContent='Сначала сохрани URL и ключ.';return;}
+  st.textContent='Проверяю…';
+  try{
+    const r=await fetch(S.settings.claudeUrl+'/v1/messages',{
+      method:'POST',
+      headers:{'content-type':'application/json','authorization':'Bearer '+S.settings.claudeKey,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:16,messages:[{role:'user',content:'ping'}]})
+    });
+    if(r.ok){st.textContent='✓ Соединение работает!';}
+    else{const e=await r.json().catch(()=>({}));st.textContent='⚠️ Ответ '+r.status+(e.error&&e.error.message?': '+e.error.message:'');}
+  }catch(e){st.textContent='⚠️ Нет соединения: '+e.message;}
 }
 function saveSettings(){
   S.settings.kcal=+document.getElementById('setKcal').value||3200;
