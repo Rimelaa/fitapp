@@ -81,6 +81,7 @@
   input[type=text],input[type=number],select{background:var(--surface2);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:10px 12px;font-size:15px;outline:none;width:100%}
   input:focus{border-color:var(--accent)}
   .search{margin-bottom:8px}
+  .search input{font-size:17px;padding:14px 16px;border-radius:14px;min-height:50px}
   .dblist{max-height:230px;overflow-y:auto}
   .dbitem{padding:9px 4px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center}
   .dbitem:last-child{border-bottom:none}
@@ -132,30 +133,10 @@
 
   <div class="card">
     <h3>Добавить еду</h3>
-    <div class="search"><input type="text" id="foodSearch" placeholder="Поиск: творог, курица, овсянка…" oninput="renderDB()"></div>
-    <div class="dblist" id="dbList"></div>
-    <details>
-      <summary>🌐 Найти в интернете (Open Food Facts)</summary>
-      <div style="margin-top:8px">
-        <div class="row" style="margin-bottom:8px">
-          <input type="text" id="netQuery" placeholder="Продукт или бренд: бигмак, доширак…" oninput="netSearchDebounced()">
-          <button class="btn secondary" style="flex:0 0 auto;padding:10px 14px" onclick="netSearch(true)">Найти</button>
-        </div>
-        <div id="netStatus" class="muted small" style="margin-bottom:6px"></div>
-        <div class="dblist" id="netList" style="max-height:230px"></div>
-      </div>
-    </details>
-    <details>
-      <summary>🏠 Приготовил сам — оценить по описанию</summary>
-      <div style="margin-top:8px">
-        <input type="text" id="homeDesc" placeholder="Что приготовил: курица с рисом, омлет…" style="margin-bottom:8px">
-        <div class="row" style="margin-bottom:8px">
-          <input type="number" id="homeGrams" placeholder="Примерно грамм">
-          <button class="btn" style="flex:0 0 auto;padding:10px 14px" onclick="estimateHome()">Оценить и добавить</button>
-        </div>
-        <div id="homeResult" class="muted small"></div>
-      </div>
-    </details>
+    <div class="search"><input type="text" id="foodSearch" placeholder="Всё в одном: творог, бигмак, шаурма, омлет…" oninput="renderSearch()"></div>
+    <div class="dblist" id="searchList"></div>
+    <div id="aiStatus" class="muted small" style="margin:6px 0"></div>
+    <div class="dblist" id="aiList"></div>
     <details>
       <summary>＋ Своё блюдо (если знаешь КБЖУ точно)</summary>
       <div style="margin-top:8px">
@@ -215,6 +196,17 @@
       <div><label class="muted small">Шаг весов, кг (на гантель)</label><input type="number" id="setStep" step="0.5"></div>
     </div>
     <div style="margin-top:10px"><button class="btn secondary" onclick="saveSettings()">Сохранить настройки</button></div>
+  </div>
+
+  <div class="card">
+    <h3>Claude API — поиск любой еды</h3>
+    <p class="muted small">Вставь свой ключ с console.anthropic.com — поиск найдёт КБЖУ чего угодно: фастфуд, блюда ресторанов, домашняя еда. Ключ хранится только на твоём телефоне, в код сайта не попадает.</p>
+    <input type="text" id="setClaudeKey" placeholder="sk-ant-..." style="margin-bottom:8px">
+    <div class="row">
+      <button class="btn secondary" onclick="saveClaudeKey()">Сохранить ключ</button>
+      <button class="btn secondary" onclick="removeClaudeKey()">Удалить</button>
+    </div>
+    <div id="claudeStatus" class="muted small" style="margin-top:6px"></div>
   </div>
 
   <div class="card">
@@ -415,17 +407,66 @@ function saveWorkout(){
 
 /* ================= ЕДА ================= */
 function allFoods(){return FOOD_DB.concat(S.customFoods.map(f=>({...f,custom:true})));}
-function renderDB(){
-  const q=document.getElementById('foodSearch').value.trim().toLowerCase();
-  const list=allFoods().filter(f=>f.n.toLowerCase().includes(q)).slice(0,25);
-  const el=document.getElementById('dbList');el.innerHTML='';
-  if(!list.length){el.innerHTML='<div class="muted" style="padding:8px 4px">Ничего не найдено — добавь своё блюдо ниже.</div>';return;}
-  list.forEach(f=>{
+function renderSearch(){
+  const q=document.getElementById('foodSearch').value.trim();
+  const list=document.getElementById('searchList');list.innerHTML='';
+  if(!q){list.innerHTML='<div class="muted" style="padding:8px 4px">Найди продукт или блюдо: локальная база совпадения покажет сразу, а с Claude-поиском (Настройки → Claude API) найдётся вообще всё.</div>';return;}
+  const ql=q.toLowerCase();
+  const local=allFoods().filter(f=>f.n.toLowerCase().includes(ql)).slice(0,8);
+  local.forEach(f=>{
     const d=document.createElement('div');d.className='dbitem';
-    d.innerHTML='<div class="n">'+f.n+'</div><div class="k">'+f.k+' ккал · '+f.p+' г белка / 100 г</div>';
-    d.onclick=()=>addFoodEntry(f);el.appendChild(d);
+    d.innerHTML='<div class="n">'+esc(f.n)+(f.custom?' <span class="badge">своё</span>':'')+'</div><div class="k">'+f.k+' ккал · '+f.p+' г / 100 г</div>';
+    d.onclick=()=>addFoodEntry(f);list.appendChild(d);
   });
+  if(q.length>=3)aiSearch(q);
 }
+let aiTimer=null,aiController=null;
+function aiSearch(q){clearTimeout(aiTimer);aiTimer=setTimeout(()=>doAiSearch(q),700);}
+async function doAiSearch(q){
+  if(!S.settings.claudeKey){aiStatus('💡 Введи ключ в Настройках → «Claude API», и поиск найдёт вообще всё. Пока работает только локальная база.');return;}
+  if(aiController)aiController.abort();
+  aiController=new AbortController();
+  aiStatus('🤔 Спрашиваю Claude про «'+q+'»…');
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'content-type':'application/json',
+        'x-api-key':S.settings.claudeKey,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      signal:aiController.signal,
+      body:JSON.stringify({
+        model:'claude-sonnet-4-5',
+        max_tokens:1024,
+        system:'Ты — база КБЖУ. Пользователь пишет продукт/блюдо/фастфуд/домашнее блюдо. Верни ТОЛЬКО валидный JSON без markdown: {"items":[{"n":"название","k":ккал_на_порцию,"p":белок_на_порцию,"g":"описание порции"}]}. 2–4 варианта порций, если уместно. Для ресторанов используй реальные данные сетей; для домашнего — типичное КБЖУ. Язык названий — русский.',
+        messages:[{role:'user',content:'КБЖУ для: '+q}]
+      })
+    });
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?e.error.message:'HTTP '+r.status);}
+    const d=await r.json();
+    const txt=d.content[0].text.replace(/```json|```/g,'').trim();
+    const parsed=JSON.parse(txt);
+    const list=document.getElementById('aiList');
+    list.innerHTML='';
+    parsed.items.forEach(it=>{
+      const div=document.createElement('div');div.className='dbitem';
+      div.innerHTML='<div class="n">'+esc(it.n)+'<div class="g">'+esc(it.g||'')+'</div></div><div class="k">'+it.k+' ккал · '+it.p+' г белка</div>';
+      div.onclick=()=>{
+        if(!S.food[today()])S.food[today()]=[];
+        S.food[today()].push({n:it.n,g:it.g||'1 порция',k:it.k,p:it.p});
+        save();renderFood();toast('Добавлено: '+it.n);
+      };
+      list.appendChild(div);
+    });
+    aiStatus('✓ Claude нашёл '+parsed.items.length+' варианта. Нажми на строку, чтобы добавить.');
+  }catch(e){
+    if(e.name==='AbortError')return;
+    aiStatus('⚠️ Ошибка Claude: '+e.message);
+  }
+}
+function aiStatus(m){document.getElementById('aiStatus').textContent=m;}
 function addFoodEntry(f){
   const g=prompt('Сколько грамм «'+f.n+'»?',100);if(g===null)return;
   const grams=+g||100;
@@ -441,45 +482,12 @@ function addCustomFood(){
   if(!n||!k){toast('Укажи название и калории');return;}
   S.customFoods.push({n:n,k:k,p:p});save();
   document.getElementById('cName').value='';document.getElementById('cKcal').value='';document.getElementById('cProt').value='';
-  renderDB();toast('Добавлено в базу');
+  renderSearch();toast('Добавлено в базу');
 }
 
-/* ---- Интернет-поиск: Open Food Facts ---- */
-let netTimer=null;
-function netSearchDebounced(){clearTimeout(netTimer);netTimer=setTimeout(()=>netSearch(false),600);}
-async function netSearch(manual){
-  const q=document.getElementById('netQuery').value.trim();
-  const st=document.getElementById('netStatus'),list=document.getElementById('netList');
-  if(!q){if(manual)toast('Введи название продукта');return;}
-  st.textContent='Ищу «'+q+'» в открытой базе…';list.innerHTML='';
-  const api='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+
-    '&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,quantity';
-  let d=null;
-  try{ // прямой запрос (работает с https-сайта)
-    const r=await fetch(api);d=await r.json();
-  }catch(e){ // запасной маршрут через прокси (для http/локального файла)
-    try{
-      const r2=await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(api));
-      d=await r2.json();
-    }catch(e2){st.textContent='Нет соединения с Open Food Facts. Проверь интернет или добавь вручную.';return;}
-  }
-  const items=(d.products||[]).filter(p=>p.product_name&&p.nutriments&&p.nutriments['energy-kcal_100g']!=null);
-  if(!items.length){st.textContent='Ничего не нашлось в Open Food Facts. Попробуй другое название или добавь вручную.';return;}
-  st.textContent='Найдено: '+items.length+'. Нажми на строку, чтобы добавить (спросит граммовку).';
-  list.innerHTML='';
-  items.slice(0,15).forEach(p=>{
-    const k=Math.round(p.nutriments['energy-kcal_100g']);
-    const prot=+(p.nutriments.proteins_100g||0).toFixed(1);
-    const name=(p.product_name+(p.brands?' · '+p.brands:'')).slice(0,60);
-    const div=document.createElement('div');div.className='dbitem';
-    div.innerHTML='<div class="n">'+esc(name)+'</div><div class="k">'+k+' ккал · '+prot+' г / 100 г</div>';
-    div.onclick=()=>addFoodEntry({n:name,k:k,p:prot});
-    list.appendChild(div);
-  });
-}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
-/* ---- Домашняя еда: оценка по описанию ---- */
+/* ---- Домашняя еда: быстрая офлайн-оценка (без API) ---- */
 const HOME_RULES=[
  {re:/куриц|курин|филе/i,n:'Курица (жареная/запечённая)',k:190,p:29},
  {re:/говядин|свинин|мясо/i,n:'Мясо (жареное/тушёное)',k:250,p:26},
@@ -641,6 +649,22 @@ function loadSettingsUI(){
   document.getElementById('setProt').value=S.settings.prot;
   document.getElementById('setGoal').value=S.settings.goal;
   document.getElementById('setStep').value=S.settings.step;
+  const hasKey=!!S.settings.claudeKey;
+  document.getElementById('claudeStatus').textContent=hasKey?'✓ Ключ сохранён, поиск любой еды активен.':'Ключ не задан — работает только локальная база.';
+}
+function saveClaudeKey(){
+  const v=document.getElementById('setClaudeKey').value.trim();
+  if(!v){toast('Вставь ключ');return;}
+  if(!v.startsWith('sk-ant-')){if(!confirm('Ключ обычно начинается с sk-ant-. Всё равно сохранить?'))return;}
+  S.settings.claudeKey=v;save();
+  document.getElementById('setClaudeKey').value='';
+  document.getElementById('claudeStatus').textContent='✓ Ключ сохранён, поиск любой еды активен.';
+  toast('Ключ сохранён ✓');
+}
+function removeClaudeKey(){
+  delete S.settings.claudeKey;save();
+  document.getElementById('claudeStatus').textContent='Ключ удалён.';
+  toast('Ключ удалён');
 }
 function saveSettings(){
   S.settings.kcal=+document.getElementById('setKcal').value||3200;
@@ -667,7 +691,7 @@ function resetAll(){
 }
 
 /* ================= INIT ================= */
-renderDayPills();renderWorkout();renderDB();renderFood();loadSettingsUI();
+renderDayPills();renderWorkout();renderSearch();renderFood();loadSettingsUI();
 </script>
 </body>
 </html>
