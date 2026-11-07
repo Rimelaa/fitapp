@@ -207,11 +207,9 @@
 
   <div class="card">
     <h3>Claude API — поиск любой еды</h3>
-    <p class="muted small">Поиск найдёт КБЖУ чего угодно: фастфуд, рестораны, домашняя еда. Ключ хранится только на твоём телефоне.</p>
-    <div style="margin-bottom:8px"><label class="muted small">Base URL</label>
-      <input type="text" id="setClaudeUrl" placeholder="https://api.nixway.xyz"></div>
+    <p class="muted small">Сервер уже настроен (api.nixway.xyz). Просто вставь свой ключ — поиск найдёт КБЖУ чего угодно. Ключ хранится только на твоём телефоне.</p>
     <div style="margin-bottom:8px"><label class="muted small">Ключ (AUTH_TOKEN)</label>
-      <input type="text" id="setClaudeKey" placeholder="sk-... / ВАШ_КЛЮЧ" autocomplete="off"></div>
+      <input type="text" id="setClaudeKey" placeholder="Вставь ключ сюда" autocomplete="off"></div>
     <div class="row" style="margin-bottom:8px">
       <button class="btn secondary" onclick="saveClaudeCfg()">Сохранить</button>
       <button class="btn secondary" onclick="testClaudeCfg()">Проверить</button>
@@ -433,12 +431,12 @@ function renderSearch(){
 let aiTimer=null,aiController=null;
 function aiSearch(q){clearTimeout(aiTimer);aiTimer=setTimeout(()=>doAiSearch(q),700);}
 async function doAiSearch(q){
-  if(!S.settings.claudeKey||!S.settings.claudeUrl){aiStatus('💡 Настрой Claude API в Настройках — и поиск найдёт вообще всё. Пока работает только локальная база.');return;}
+  if(!S.settings.claudeKey){aiStatus('💡 Вставь ключ в Настройках → «Claude API» — и поиск найдёт вообще всё. Пока работает только локальная база.');return;}
   if(aiController)aiController.abort();
   aiController=new AbortController();
   aiStatus('🤔 Спрашиваю Claude про «'+q+'»…');
   try{
-    const r=await fetch(S.settings.claudeUrl+'/v1/messages',{
+    const r=await fetch(AI_URL,{
       method:'POST',
       headers:{
         'content-type':'application/json',
@@ -447,7 +445,7 @@ async function doAiSearch(q){
       },
       signal:aiController.signal,
       body:JSON.stringify({
-        model:'claude-sonnet-4-5',
+        model:AI_MODEL,
         max_tokens:1024,
         system:'Ты — база КБЖУ. Пользователь пишет продукт/блюдо/фастфуд/домашнее блюдо. Верни ТОЛЬКО валидный JSON без markdown: {"items":[{"n":"название","k":ккал_на_порцию,"p":белок_на_порцию,"g":"описание порции"}]}. 2–4 варианта порций, если уместно. Для ресторанов используй реальные данные сетей; для домашнего — типичное КБЖУ. Язык названий — русский.',
         messages:[{role:'user',content:'КБЖУ для: '+q}]
@@ -653,37 +651,36 @@ function addBodyweight(){
 }
 
 /* ================= НАСТРОЙКИ ================= */
+const AI_URL='https://api.nixway.xyz/v1/messages';
+const AI_MODEL='claude-haiku-4-5';
 function loadSettingsUI(){
   document.getElementById('setKcal').value=S.settings.kcal;
   document.getElementById('setProt').value=S.settings.prot;
   document.getElementById('setGoal').value=S.settings.goal;
   document.getElementById('setStep').value=S.settings.step;
-  document.getElementById('setClaudeUrl').value=S.settings.claudeUrl||'';
   document.getElementById('setClaudeKey').value=S.settings.claudeKey||'';
   updClaudeStatus();
 }
 function updClaudeStatus(){
-  const ok=!!(S.settings.claudeUrl&&S.settings.claudeKey);
+  const ok=!!S.settings.claudeKey;
   document.getElementById('claudeStatus').textContent=ok
-    ?'✓ Настроено: '+S.settings.claudeUrl.replace(/^https?:\/\//,'')
-    :'Не настроено — работает только локальная база.';
+    ?'✓ Ключ сохранён, сервер api.nixway.xyz, модель '+AI_MODEL+'.'
+    :'Ключ не задан — работает только локальная база.';
 }
 function saveClaudeCfg(){
-  const u=document.getElementById('setClaudeUrl').value.trim().replace(/\/+$/,'');
   const k=document.getElementById('setClaudeKey').value.trim();
-  if(!u||!k){toast('Нужны и URL, и ключ');return;}
-  if(!u.startsWith('http')){toast('URL должен начинаться с https://');return;}
-  S.settings.claudeUrl=u;S.settings.claudeKey=k;save();updClaudeStatus();toast('Сохранено ✓');
+  if(!k){toast('Вставь ключ');return;}
+  S.settings.claudeKey=k;save();updClaudeStatus();toast('Сохранено ✓');
 }
 async function testClaudeCfg(){
   const st=document.getElementById('claudeStatus');
-  if(!S.settings.claudeUrl||!S.settings.claudeKey){st.textContent='Сначала сохрани URL и ключ.';return;}
+  if(!S.settings.claudeKey){st.textContent='Сначала вставь и сохрани ключ.';return;}
   st.textContent='Проверяю…';
   try{
-    const r=await fetch(S.settings.claudeUrl+'/v1/messages',{
+    const r=await fetch(AI_URL,{
       method:'POST',
       headers:{'content-type':'application/json','authorization':'Bearer '+S.settings.claudeKey,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:16,messages:[{role:'user',content:'ping'}]})
+      body:JSON.stringify({model:AI_MODEL,max_tokens:16,messages:[{role:'user',content:'ping'}]})
     });
     if(r.ok){st.textContent='✓ Соединение работает!';}
     else{const e=await r.json().catch(()=>({}));st.textContent='⚠️ Ответ '+r.status+(e.error&&e.error.message?': '+e.error.message:'');}
