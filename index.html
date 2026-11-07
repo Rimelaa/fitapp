@@ -171,7 +171,7 @@
     <h3>Вес тела</h3>
     <div class="row" style="margin-bottom:10px">
       <input type="number" step="0.1" id="bwInput" placeholder="Вес сегодня, кг">
-      <button class="btn" style="flex:0 0 auto;padding:10px 16px" onclick="addBodyweight()">Записать</button>
+      <button class="btn" style="flex:0 0 auto;width:auto;min-width:120px" onclick="addBodyweight()">Записать</button>
     </div>
     <svg class="chart" id="bwChart" preserveAspectRatio="none"></svg>
     <div class="muted small" id="bwHint"></div>
@@ -210,6 +210,13 @@
     <p class="muted small">Сервер уже настроен (api.nixway.xyz). Просто вставь свой ключ — поиск найдёт КБЖУ чего угодно. Ключ хранится только на твоём телефоне.</p>
     <div style="margin-bottom:8px"><label class="muted small">Ключ (AUTH_TOKEN)</label>
       <input type="text" id="setClaudeKey" placeholder="Вставь ключ сюда" autocomplete="off"></div>
+    <div style="margin-bottom:8px"><label class="muted small">Модель</label>
+      <div class="row">
+        <select id="setModelSel"><option value="">— авто (поиск сама) —</option></select>
+        <button class="btn secondary" style="flex:0 0 auto;width:auto;min-width:100px" onclick="loadModels()">🔄 Список</button>
+      </div>
+    </div>
+    <div id="modelStatus" class="muted small" style="margin-bottom:8px"></div>
     <div class="row" style="margin-bottom:8px">
       <button class="btn secondary" onclick="saveClaudeCfg()">Сохранить</button>
       <button class="btn secondary" onclick="testClaudeCfg()">Проверить</button>
@@ -636,20 +643,49 @@ function addBodyweight(){
 /* ================= НАСТРОЙКИ ================= */
 const AI_URL='https://api.nixway.xyz/v1/messages';
 const AI_BASE='https://api.nixway.xyz';
-const AI_MODEL='claude-haiku-4-5';
-const AI_FALLBACKS=['claude-haiku-4-5','claude-haiku-4-5-20251001','claude-haiku-4-5-20251015','claude-3-5-haiku-20241022','claude-3-5-haiku-latest'];
+const AI_MODEL='claude-haiku-5-5';
+const AI_FALLBACKS=['claude-haiku-5-5','claude-haiku-5-5-20251101','claude-haiku-4-5','claude-haiku-4-5-20251001','claude-3-5-haiku-20241022'];
 function loadSettingsUI(){
   document.getElementById('setKcal').value=S.settings.kcal;
   document.getElementById('setProt').value=S.settings.prot;
   document.getElementById('setGoal').value=S.settings.goal;
   document.getElementById('setStep').value=S.settings.step;
   document.getElementById('setClaudeKey').value=S.settings.claudeKey||'';
+  const sel=document.getElementById('setModelSel');
+  sel.onchange=()=>{
+    const v=sel.value;
+    if(v){S.settings.aiModel=v;S.settings.aiModelManual=true;toast('Модель: '+v);}
+    else{delete S.settings.aiModel;delete S.settings.aiModelManual;toast('Авто-выбор модели');}
+    save();updClaudeStatus();
+  };
+  fillModelSel();
   updClaudeStatus();
+}
+function fillModelSel(){
+  const sel=document.getElementById('setModelSel');
+  const cur=S.settings.aiModel||'';
+  const opts=[{v:'',t:'— авто (поиск сама) —'}];
+  AI_FALLBACKS.forEach(m=>opts.push({v:m,t:m}));
+  if(cur&&!opts.some(o=>o.v===cur))opts.push({v:cur,t:cur+' (с сервера)'});
+  sel.innerHTML=opts.map(o=>'<option value="'+o.v+'"'+(o.v===cur?' selected':'')+'>'+o.t+'</option>').join('');
+  document.getElementById('modelStatus').textContent=cur?'Выбрана: '+cur:'Авто: пробует Haiku, потом Sonnet.';
+}
+async function loadModels(){
+  const st=document.getElementById('modelStatus');
+  if(!S.settings.claudeKey){st.textContent='Сначала сохрани ключ.';return;}
+  st.textContent='Запрашиваю список моделей…';
+  const list=await fetchModelList();
+  if(!list){st.textContent='Не удалось получить список. Проверь ключ или выбери вручную.';return;}
+  const sel=document.getElementById('setModelSel');
+  const cur=S.settings.aiModel||'';
+  sel.innerHTML='<option value="">— авто (поиск сама) —</option>'+
+    list.map(m=>'<option value="'+m+'"'+(m===cur?' selected':'')+'>'+m+'</option>').join('');
+  st.textContent='Доступно моделей: '+list.length+'. Выбери — применится сразу.';
 }
 function updClaudeStatus(){
   const ok=!!S.settings.claudeKey;
   document.getElementById('claudeStatus').textContent=ok
-    ?'✓ Ключ сохранён, сервер api.nixway.xyz, модель '+AI_MODEL+'.'
+    ?'✓ Ключ сохранён, сервер api.nixway.xyz'+(S.settings.aiModel?', модель '+S.settings.aiModel:'')+'.'
     :'Ключ не задан — работает только локальная база.';
 }
 function saveClaudeCfg(){
@@ -667,33 +703,66 @@ async function testClaudeCfg(){
   if(res.ok)S.settings.aiModel=res.model;
   save();
 }
+/* Спросить у шлюза список доступных моделей */
+async function fetchModelList(){
+  try{
+    const r=await fetch(AI_BASE+'/v1/models',{
+      headers:{'authorization':'Bearer '+S.settings.claudeKey,'anthropic-version':'2023-06-01'}
+    });
+    if(!r.ok)return null;
+    const d=await r.json();
+    const arr=(d.data||d.models||[]).map(m=>m.id||m.name).filter(Boolean);
+    return arr.length?arr:null;
+  }catch(e){return null;}
+}
+/* fetch с таймаутом, чтобы не зависать на медленных моделях */
+function fetchTO(url,opts,ms){
+  const ctl=new AbortController();
+  const t=setTimeout(()=>ctl.abort(),ms||20000);
+  if(opts.signal)opts.signal.addEventListener('abort',()=>ctl.abort());
+  return fetch(url,{...opts,signal:ctl.signal}).finally(()=>clearTimeout(t));
+}
 /* Универсальный вызов: перебирает варианты названия модели, пока не найдёт рабочий */
 async function aiCall(userText, systemText){
   const key=S.settings.claudeKey;
-  const candidates=S.settings.aiModel?[S.settings.aiModel]:AI_FALLBACKS;
+  // если модель выбрана вручную — используем только её; иначе автоподбор
+  const candidates=(S.settings.aiModelManual&&S.settings.aiModel)?[S.settings.aiModel]:
+    (S.settings.aiModel?[S.settings.aiModel]:AI_FALLBACKS.slice());
   let lastErr='';
-  for(const model of candidates){
-    try{
-      const r=await fetch(AI_URL,{
-        method:'POST',
-        headers:{'content-type':'application/json','authorization':'Bearer '+key,'anthropic-version':'2023-06-01'},
-        body:JSON.stringify({model:model,max_tokens:1024,
-          ...(systemText?{system:systemText}:{}),
-          messages:[{role:'user',content:userText}]})
-      });
-      if(r.ok){
-        const d=await r.json();
-        const txt=(d.content&&d.content[0]&&d.content[0].text)||'';
-        return {ok:true,model:model,text:txt};
+  for(let round=0;round<2;round++){
+    for(const model of candidates){
+      try{
+        const r=await fetchTO(AI_URL,{
+          method:'POST',
+          headers:{'content-type':'application/json','authorization':'Bearer '+key,'anthropic-version':'2023-06-01'},
+          body:JSON.stringify({model:model,max_tokens:1024,
+            ...(systemText?{system:systemText}:{}),
+            messages:[{role:'user',content:userText}]})
+        },20000);
+        if(r.ok){
+          const d=await r.json();
+          const txt=(d.content&&d.content[0]&&d.content[0].text)||'';
+          if(!S.settings.aiModelManual){S.settings.aiModel=model;save();} // запомнить удачную — дальше без перебора
+          return {ok:true,model:model,text:txt};
+        }
+        const e=await r.json().catch(()=>({}));
+        const msg=(e.error&&(e.error.message||e.error.type))||('HTTP '+r.status);
+        lastErr=model+' → '+msg;
+        if(r.status===404)continue;
+        if(r.status===401||r.status===403)return {ok:false,err:'Ключ отклонён сервером ('+r.status+'): '+msg};
+        return {ok:false,err:model+' → '+msg};
+      }catch(e){
+        lastErr=model+' → '+(e.name==='AbortError'?'таймаут 20 сек (модель не отвечает)':e.message);
+        if(e.name==='AbortError')continue;
       }
-      const e=await r.json().catch(()=>({}));
-      const msg=(e.error&&(e.error.message||e.error.type))||('HTTP '+r.status);
-      lastErr=model+' → '+msg;
-      // 404 на конкретную модель — пробуем следующее название
-      if(r.status===404)continue;
-      // 401/403 — ключ неверный, дальше перебирать бессмысленно
-      if(r.status===401||r.status===403)return {ok:false,err:'Ключ отклонён сервером ('+r.status+'): '+msg};
-    }catch(e){lastErr=model+' → '+e.message;}
+    }
+    if(round===0){ // все имена дали 404 — спрашиваем у сервера реальный список
+      const list=await fetchModelList();
+      if(!list)return {ok:false,err:'Все варианты модели дали 404, список моделей сервер не отдал. '+lastErr};
+      const pick=list.find(m=>/haiku/i.test(m))||list.find(m=>/sonnet-5-5/i.test(m))||list.find(m=>/sonnet/i.test(m))||list[0];
+      if(pick){candidates=[pick];S.settings.aiModel=pick;save();}
+      else return {ok:false,err:'Сервер не отдал ни одной модели.'};
+    }
   }
   return {ok:false,err:lastErr||'неизвестная ошибка'};
 }
