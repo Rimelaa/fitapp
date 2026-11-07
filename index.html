@@ -435,25 +435,11 @@ async function doAiSearch(q){
   if(aiController)aiController.abort();
   aiController=new AbortController();
   aiStatus('🤔 Спрашиваю Claude про «'+q+'»…');
+  const SYS='Ты — база КБЖУ. Пользователь пишет продукт/блюдо/фастфуд/домашнее блюдо. Верни ТОЛЬКО валидный JSON без markdown: {"items":[{"n":"название","k":ккал_на_порцию,"p":белок_на_порцию,"g":"описание порции"}]}. 2–4 варианта порций, если уместно. Для ресторанов используй реальные данные сетей; для домашнего — типичное КБЖУ. Язык названий — русский.';
+  const res=await aiCall('КБЖУ для: '+q,SYS);
+  if(!res.ok){aiStatus('⚠️ '+res.err);return;}
   try{
-    const r=await fetch(AI_URL,{
-      method:'POST',
-      headers:{
-        'content-type':'application/json',
-        'authorization':'Bearer '+S.settings.claudeKey,
-        'anthropic-version':'2023-06-01'
-      },
-      signal:aiController.signal,
-      body:JSON.stringify({
-        model:AI_MODEL,
-        max_tokens:1024,
-        system:'Ты — база КБЖУ. Пользователь пишет продукт/блюдо/фастфуд/домашнее блюдо. Верни ТОЛЬКО валидный JSON без markdown: {"items":[{"n":"название","k":ккал_на_порцию,"p":белок_на_порцию,"g":"описание порции"}]}. 2–4 варианта порций, если уместно. Для ресторанов используй реальные данные сетей; для домашнего — типичное КБЖУ. Язык названий — русский.',
-        messages:[{role:'user',content:'КБЖУ для: '+q}]
-      })
-    });
-    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?e.error.message:'HTTP '+r.status);}
-    const d=await r.json();
-    const txt=d.content[0].text.replace(/```json|```/g,'').trim();
+    const txt=res.text.replace(/```json|```/g,'').trim();
     const parsed=JSON.parse(txt);
     const list=document.getElementById('aiList');
     list.innerHTML='';
@@ -467,11 +453,8 @@ async function doAiSearch(q){
       };
       list.appendChild(div);
     });
-    aiStatus('✓ Claude нашёл '+parsed.items.length+' варианта. Нажми на строку, чтобы добавить.');
-  }catch(e){
-    if(e.name==='AbortError')return;
-    aiStatus('⚠️ Ошибка Claude: '+e.message);
-  }
+    aiStatus('✓ Модель '+res.model+' нашла '+parsed.items.length+' варианта. Нажми на строку, чтобы добавить.');
+  }catch(e){aiStatus('⚠️ Модель ответила не в том формате: '+e.message);}
 }
 function aiStatus(m){document.getElementById('aiStatus').textContent=m;}
 function addFoodEntry(f){
@@ -652,7 +635,9 @@ function addBodyweight(){
 
 /* ================= НАСТРОЙКИ ================= */
 const AI_URL='https://api.nixway.xyz/v1/messages';
+const AI_BASE='https://api.nixway.xyz';
 const AI_MODEL='claude-haiku-4-5';
+const AI_FALLBACKS=['claude-haiku-4-5','claude-haiku-4-5-20251001','claude-haiku-4-5-20251015','claude-3-5-haiku-20241022','claude-3-5-haiku-latest'];
 function loadSettingsUI(){
   document.getElementById('setKcal').value=S.settings.kcal;
   document.getElementById('setProt').value=S.settings.prot;
@@ -676,15 +661,41 @@ async function testClaudeCfg(){
   const st=document.getElementById('claudeStatus');
   if(!S.settings.claudeKey){st.textContent='Сначала вставь и сохрани ключ.';return;}
   st.textContent='Проверяю…';
-  try{
-    const r=await fetch(AI_URL,{
-      method:'POST',
-      headers:{'content-type':'application/json','authorization':'Bearer '+S.settings.claudeKey,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:AI_MODEL,max_tokens:16,messages:[{role:'user',content:'ping'}]})
-    });
-    if(r.ok){st.textContent='✓ Соединение работает!';}
-    else{const e=await r.json().catch(()=>({}));st.textContent='⚠️ Ответ '+r.status+(e.error&&e.error.message?': '+e.error.message:'');}
-  }catch(e){st.textContent='⚠️ Нет соединения: '+e.message;}
+  const res=await aiCall('ping');
+  if(res.ok)st.textContent='✓ Соединение работает! Модель: '+res.model;
+  else st.textContent='⚠️ '+res.err;
+  if(res.ok)S.settings.aiModel=res.model;
+  save();
+}
+/* Универсальный вызов: перебирает варианты названия модели, пока не найдёт рабочий */
+async function aiCall(userText, systemText){
+  const key=S.settings.claudeKey;
+  const candidates=S.settings.aiModel?[S.settings.aiModel]:AI_FALLBACKS;
+  let lastErr='';
+  for(const model of candidates){
+    try{
+      const r=await fetch(AI_URL,{
+        method:'POST',
+        headers:{'content-type':'application/json','authorization':'Bearer '+key,'anthropic-version':'2023-06-01'},
+        body:JSON.stringify({model:model,max_tokens:1024,
+          ...(systemText?{system:systemText}:{}),
+          messages:[{role:'user',content:userText}]})
+      });
+      if(r.ok){
+        const d=await r.json();
+        const txt=(d.content&&d.content[0]&&d.content[0].text)||'';
+        return {ok:true,model:model,text:txt};
+      }
+      const e=await r.json().catch(()=>({}));
+      const msg=(e.error&&(e.error.message||e.error.type))||('HTTP '+r.status);
+      lastErr=model+' → '+msg;
+      // 404 на конкретную модель — пробуем следующее название
+      if(r.status===404)continue;
+      // 401/403 — ключ неверный, дальше перебирать бессмысленно
+      if(r.status===401||r.status===403)return {ok:false,err:'Ключ отклонён сервером ('+r.status+'): '+msg};
+    }catch(e){lastErr=model+' → '+e.message;}
+  }
+  return {ok:false,err:lastErr||'неизвестная ошибка'};
 }
 function saveSettings(){
   S.settings.kcal=+document.getElementById('setKcal').value||3200;
