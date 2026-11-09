@@ -87,6 +87,19 @@
   .fitem button{background:none;border:none;color:var(--bad);font-size:18px;cursor:pointer;padding:8px;min-height:var(--ctl-h-sm);min-width:var(--ctl-h-sm)}
   .search{margin-bottom:10px}
   .search input{font-size:17px;min-height:52px;border-radius:14px;padding:0 16px}
+  /* поля карточки Claude AI */
+  .aifield{display:block;width:100%;margin-top:6px;background:var(--surface2);border:1px solid var(--line);
+    border-radius:var(--r-md);color:var(--text);font-size:15px;padding:0 14px;min-height:var(--ctl-h);
+    outline:none;-webkit-appearance:none;appearance:none}
+  .aifield:focus{border-color:var(--accent)}
+  .aifield::placeholder{color:#5f6774;font-size:14px}
+  .aicheck{display:flex;align-items:center;gap:10px;margin-top:10px;min-height:44px;
+    font-size:14px;color:var(--muted);cursor:pointer;user-select:none}
+  .aicheck input{-webkit-appearance:none;appearance:none;width:22px;height:22px;min-height:0;margin:0;flex:none;
+    background:var(--surface2);border:1.5px solid var(--line);border-radius:6px;position:relative;cursor:pointer}
+  .aicheck input:checked{background:var(--accent);border-color:var(--accent)}
+  .aicheck input:checked::after{content:'';position:absolute;left:6px;top:2px;width:6px;height:11px;
+    border:solid #08110c;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
   .dblist{max-height:240px;overflow-y:auto}
   .dbitem{padding:12px 4px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center;min-height:52px}
   .dbitem:last-child{border-bottom:none}
@@ -206,9 +219,18 @@
   </div>
 
   <div class="card">
-    <h3>Claude AI — поиск любой еды <span class="muted small">v5</span></h3>
-    <p class="muted small">Всё уже настроено: сервер и ключ вшиты (как в savebot), модель claude-sonnet-5. Просто ищи еду на вкладке «Еда».</p>
-    <button class="btn secondary" onclick="testClaudeCfg()">Проверить связь</button>
+    <h3>Claude AI — поиск любой еды <span class="muted small">v7</span></h3>
+    <p class="muted small">Работает через Cloudflare Worker: шлюз Nixway пускает только клиентов с нужным <code>User-Agent</code>, а браузер его подменить не может. Ключ хранится здесь, на телефоне, и передаётся воркеру при каждом запросе.</p>
+    <label class="muted small">Адрес воркера</label>
+    <input type="text" id="setAiWorker" class="aifield" placeholder="https://forma-ai.39dda39.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label class="muted small" style="display:block;margin-top:12px">API-ключ Nixway</label>
+    <input type="password" id="setAiKey" class="aifield" placeholder="sk-nixw-claude-…" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label class="aicheck">
+      <input type="checkbox" id="setAiKeyShow" onchange="toggleKeyVisibility()">
+      Показать ключ
+    </label>
+    <button class="btn secondary" style="margin-top:8px" onclick="saveSettings()">Сохранить</button>
+    <button class="btn secondary" style="margin-top:8px" onclick="testClaudeCfg()">Проверить связь</button>
     <button class="btn secondary" style="margin-top:8px" onclick="probeModels()">🔍 Найти рабочую модель</button>
     <div id="claudeStatus" class="muted small" style="margin-top:8px"></div>
   </div>
@@ -428,8 +450,7 @@ let aiTimer=null,aiController=null;
 function aiSearch(q){clearTimeout(aiTimer);aiTimer=setTimeout(()=>doAiSearch(q),700);}
 async function doAiSearch(q){
   aiStatus('🤔 Спрашиваю Claude про «'+q+'»…');
-  const SYS='Ты — база КБЖУ. Пользователь пишет продукт/блюдо/фастфуд/домашнее блюдо. Верни ТОЛЬКО валидный JSON без markdown: {"items":[{"n":"название","k":ккал_на_порцию,"p":белок_на_порцию,"g":"описание порции"}]}. 2–4 варианта порций, если уместно. Для ресторанов используй реальные данные сетей; для домашнего — типичное КБЖУ. Язык названий — русский.';
-  const res=await aiCall('КБЖУ для: '+q,SYS);
+  const res=await aiCall(q);
   if(!res.ok){aiStatus('⚠️ '+res.err);return;}
   try{
     const txt=res.text.replace(/```json|```/g,'').trim();
@@ -627,61 +648,67 @@ function addBodyweight(){
 }
 
 /* ================= НАСТРОЙКИ ================= */
-/* ==== Claude AI — конфигурация как в savebot (F:\savebot\.env) ==== */
-const AI_URL='https://api.nixway.xyz/v1/messages';
-const AI_BASE='https://api.nixway.xyz';
-const AI_KEY='sk-nixw-claude-S4hCXRihFtoomk5mvBmEaM9fi4ExtYNJkot7Jl6S3lQ';
+/* ==== Claude AI ====
+   Шлюз Nixway пускает только клиентов с User-Agent «opencode*»/«anthropic*»,
+   а браузер этот заголовок выставить не может (он запрещён в fetch) — поэтому
+   страница ходит НЕ напрямую, а через Cloudflare Worker (worker.js в этой папке).
+   Ключ живёт в секрете NIXWAY_KEY на воркере, в странице его больше нет. */
+const AI_WORKER_DEFAULT='';            // вставь сюда адрес воркера, напр. https://forma-ai.твой-логин.workers.dev
 const AI_MODEL='claude-sonnet-5';
+function aiWorkerUrl(){
+  return (S.settings.aiWorker||AI_WORKER_DEFAULT||'').trim().replace(/\/+$/,'');
+}
+function aiKey(){
+  return (S.settings.apiKey||'').trim();
+}
+function toggleKeyVisibility(){
+  const on=document.getElementById('setAiKeyShow').checked;
+  document.getElementById('setAiKey').type=on?'text':'password';
+}
 function loadSettingsUI(){
   document.getElementById('setKcal').value=S.settings.kcal;
   document.getElementById('setProt').value=S.settings.prot;
   document.getElementById('setGoal').value=S.settings.goal;
   document.getElementById('setStep').value=S.settings.step;
+  document.getElementById('setAiWorker').value=S.settings.aiWorker||'';
+  const k=document.getElementById('setAiKey');
+  // ключ никогда не показываем обратно — только вводим заново при замене
+  k.value='';
+  k.placeholder=S.settings.apiKey?'Ключ сохранён — введи новый, чтобы заменить':'sk-nixw-claude-…';
 }
 async function testClaudeCfg(){
   const st=document.getElementById('claudeStatus');
   st.textContent='Проверяю…';
+  if(!aiWorkerUrl()){
+    st.textContent='⚠️ Адрес воркера не задан. Вставь его в поле выше и сохрани настройки.';
+    return;
+  }
   const t0=Date.now();
-  const res=await aiCall('ping');
+  const res=await aiCall('творог 5%');
   const sec=Math.round((Date.now()-t0)/1000);
-  if(res.ok)st.textContent='✓ Соединение работает! Модель: '+AI_MODEL+' ('+sec+' сек).';
+  if(res.ok)st.textContent='✓ Соединение работает! Модель: '+res.model+' ('+sec+' сек).';
   else st.textContent='⚠️ '+res.err+' ('+sec+' сек)';
 }
 /* Диагностика: перебираем модели шлюза, находим рабочую и запоминаем её */
-const PROBE_MODELS=['claude-sonnet-5','claude-sonnet-5-5','claude-opus-5','claude-opus-5-5','claude-fable-5','claude-fable-5-1','claude-haiku-5-5'];
+const PROBE_MODELS=['claude-sonnet-5','claude-sonnet-5-5','claude-opus-5','claude-opus-5-5','claude-fable-5','claude-fable-5-1'];
 async function probeModels(){
   const st=document.getElementById('claudeStatus');
+  if(!aiWorkerUrl()){st.textContent='⚠️ Адрес воркера не задан. Вставь его в поле выше и сохрани настройки.';return;}
   st.textContent='Проверяю модели…';
   const found=[];
   for(const m of PROBE_MODELS){
     try{
-      const r=await fetchTO(AI_URL,{
-        method:'POST',
-        headers:{'content-type':'text/plain','authorization':'Bearer '+AI_KEY,'anthropic-version':'2023-06-01'},
-        body:JSON.stringify({model:m,max_tokens:16,messages:[{role:'user',content:'ping'}]})
-      },12000);
+      const r=await aiCall('творог 5%',null,m);
       if(r.ok){
         S.settings.aiModel=m;save();
         st.textContent='✓ Рабочая модель: '+m+'. Запомнена — поиск еды теперь использует её.';
         return;
       }
-      found.push(m+'→'+r.status);
-    }catch(e){found.push(m+'→таймаут');}
+      found.push(m+'→'+r.err);
+    }catch(e){found.push(m+'→'+e.message);}
     st.textContent='Проверено: '+found.join(', ');
   }
-  st.textContent='Ни одна модель не ответила: '+found.join(', ')+'. Проверь ключ/баланс на Nixway.';
-}
-/* Список моделей шлюза (использовался для выпадающего списка, оставлен на будущее) */
-async function fetchModelList(){
-  try{
-    const r=await fetch(AI_BASE+'/v1/models',{
-      headers:{'authorization':'Bearer '+AI_KEY,'anthropic-version':'2023-06-01'}
-    });
-    if(!r.ok)return null;
-    const d=await r.json();
-    const arr=(d.data||d.models||[]).map(m=>m.id||m.name).filter(Boolean);
-    return arr.length?arr:null;
-  }catch(e){return null;}
+  st.textContent='Ни одна модель не ответила: '+found.join(', ')+'. Проверь секрет NIXWAY_KEY и баланс на Nixway.';
 }
 /* fetch с таймаутом на ВСЁ — включая чтение тела ответа */
 async function fetchTO(url,opts,ms){
@@ -691,33 +718,37 @@ async function fetchTO(url,opts,ms){
   try{
     const r=await fetch(url,{...opts,signal:ctl.signal});
     // тело читаем под тем же таймером — иначе медленный ответ висит вечно
-    const cloned={ok:r.ok,status:r.status,json:async()=>r.json()};
     let body;
     try{body=await r.json();}catch(e){body={};}
-    cloned._body=body;
     return {ok:r.ok,status:r.status,body:body};
   }finally{clearTimeout(t);}
 }
-/* Универсальный вызов Claude: сервер, ключ и модель зашиты как в savebot */
-async function aiCall(userText, systemText){
+/* Универсальный вызов Claude через воркер: страница -> воркер -> шлюз Nixway */
+const AI_TIMEOUT=55000;   // модель отвечает 15–25 сек, даём запас
+async function aiCall(userText, systemText, modelOverride){
+  const base=aiWorkerUrl();
+  if(!base)return {ok:false,err:'Не задан адрес воркера (Настройки → Claude AI)'};
+  const key=aiKey();
+  if(!key)return {ok:false,err:'Не введён API-ключ Nixway (Настройки → Claude AI)'};
   try{
-    const r=await fetchTO(AI_URL,{
+    const r=await fetchTO(base,{
       method:'POST',
-      headers:{'content-type':'text/plain','authorization':'Bearer '+AI_KEY,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:(S.settings.aiModel||AI_MODEL),max_tokens:1024,
-        ...(systemText?{system:systemText}:{}),
-        messages:[{role:'user',content:userText}]})
-    },25000);
+      headers:{'content-type':'application/json','x-nixway-key':key},
+      body:JSON.stringify({
+        q:String(userText).replace(/^КБЖУ для:\s*/,''),
+        model:(modelOverride||S.settings.aiModel||AI_MODEL)
+      })
+    },AI_TIMEOUT);
     if(r.ok){
       const d=r.body;
       const txt=(d.content&&d.content[0]&&d.content[0].text)||'';
-      return {ok:true,text:txt};
+      return {ok:true,text:txt,model:d.model||modelOverride||S.settings.aiModel||AI_MODEL};
     }
     const e=r.body||{};
-    const msg=(e.error&&(e.error.message||e.error.type))||('HTTP '+r.status);
+    const msg=(e.error&&(e.error.message||e.error.type))||(e.detail)||('HTTP '+r.status);
     return {ok:false,err:'Ответ '+r.status+': '+msg};
   }catch(e){
-    return {ok:false,err:e.name==='AbortError'?'таймаут 25 сек — сервер не отвечает':e.message};
+    return {ok:false,err:e.name==='AbortError'?'таймаут '+Math.round(AI_TIMEOUT/1000)+' сек — сервер не отвечает':e.message};
   }
 }
 function saveSettings(){
@@ -725,17 +756,34 @@ function saveSettings(){
   S.settings.prot=+document.getElementById('setProt').value||135;
   S.settings.goal=+document.getElementById('setGoal').value||83;
   S.settings.step=+document.getElementById('setStep').value||2;
-  save();toast('Настройки сохранены ✓');renderFood();
+  S.settings.aiWorker=document.getElementById('setAiWorker').value.trim().replace(/\/+$/,'');
+  const k=document.getElementById('setAiKey').value.trim();
+  if(k)S.settings.apiKey=k;   // пустое поле не стирает уже сохранённый ключ
+  save();loadSettingsUI();
+  toast('Настройки сохранены ✓');renderFood();
 }
 function exportData(){
-  const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});
+  // ключ в резервную копию не пишем — файл может уехать в облако
+  const copy=JSON.parse(JSON.stringify(S));
+  if(copy.settings)delete copy.settings.apiKey;
+  const blob=new Blob([JSON.stringify(copy,null,1)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='form-backup-'+today()+'.json';a.click();
+  toast('Экспорт готов. API-ключ в файл не попал.');
 }
 function importData(ev){
   const f=ev.target.files[0];if(!f)return;
   const r=new FileReader();
-  r.onload=()=>{try{const d=JSON.parse(r.result);if(d&&d.workouts!==undefined){S=Object.assign(S,d);save();toast('Данные восстановлены ✓');renderFood();renderWorkout();renderProgress();loadSettingsUI();}else toast('Файл не подходит');}catch(e){toast('Ошибка чтения файла');}};
+  r.onload=()=>{try{
+    const d=JSON.parse(r.result);
+    if(!d||d.workouts===undefined){toast('Файл не подходит');return;}
+    const keepKey=S.settings&&S.settings.apiKey;
+    S=Object.assign(S,d);
+    // ключ из файла не берём (в бэкапе его нет) — сохраняем введённый на телефоне
+    if(keepKey)S.settings.apiKey=keepKey;
+    save();toast('Данные восстановлены ✓');
+    renderFood();renderWorkout();renderProgress();loadSettingsUI();
+  }catch(e){toast('Ошибка чтения файла');}};
   r.readAsText(f);
 }
 function resetAll(){
