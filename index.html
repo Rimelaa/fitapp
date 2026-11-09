@@ -575,25 +575,56 @@ function allFoods(){return FOOD_DB.concat(S.customFoods.map(f=>({...f,custom:tru
 function renderSearch(){
   const q=document.getElementById('foodSearch').value.trim();
   const list=document.getElementById('searchList');list.innerHTML='';
-  if(!q){list.innerHTML='<div class="muted" style="padding:8px 4px">Найди продукт или блюдо: локальная база совпадения покажет сразу, а с Claude-поиском (Настройки → Claude API) найдётся вообще всё.</div>';return;}
+  if(!q){
+    // строку стёрли — гасим и незавершённый поиск, и старые варианты
+    cancelAiSearch();
+    document.getElementById('aiList').innerHTML='';
+    aiStatus('');
+    list.innerHTML='<div class="muted" style="padding:8px 4px">Найди продукт или блюдо: локальная база совпадения покажет сразу, а с Claude-поиском (Настройки → Claude API) найдётся вообще всё.</div>';
+    return;
+  }
   const ql=q.toLowerCase();
   const local=allFoods().filter(f=>f.n.toLowerCase().includes(ql)).slice(0,8);
   local.forEach(f=>{
     const d=document.createElement('div');d.className='dbitem';
     d.innerHTML='<div class="n">'+esc(f.n)+(f.custom?' <span class="badge">своё</span>':'')+'</div><div class="k">'+f.k+' ккал · '+f.p+' г / 100 г</div>';
-    d.onclick=()=>addFoodEntry(f);list.appendChild(d);
+    d.onclick=()=>{addFoodEntry(f);clearFoodSearch();};list.appendChild(d);
   });
   if(q.length>=3)aiSearch(q);
 }
-let aiTimer=null,aiController=null;
-function aiSearch(q){clearTimeout(aiTimer);aiTimer=setTimeout(()=>doAiSearch(q),700);}
+let aiTimer=null,aiController=null,aiSeq=0;
+function aiSearch(q){
+  clearTimeout(aiTimer);
+  // новый ввод отменяет прежний запрос — старый ответ не должен приезжать поверх нового
+  cancelAiSearch();
+  aiTimer=setTimeout(()=>doAiSearch(q),700);
+}
+/* полностью останавливает поиск: таймер, сетевой запрос и состояние «думаю» */
+function cancelAiSearch(){
+  aiSeq++;                       // ответы прежних запросов теперь игнорируются
+  clearTimeout(aiTimer);
+  if(aiController){aiController.abort();aiController=null;}
+}
+/* выбран продукт: гасим поиск, чистим строку и два списка результатов */
+function clearFoodSearch(){
+  cancelAiSearch();
+  const inp=document.getElementById('foodSearch');
+  if(inp)inp.value='';
+  const list=document.getElementById('searchList');list.innerHTML='';
+  document.getElementById('aiList').innerHTML='';
+  aiStatus('');
+}
 async function doAiSearch(q){
+  const my=++aiSeq;
   aiStatus('🤔 Спрашиваю Claude про «'+q+'»…');
-  const res=await aiCall('КБЖУ для: '+q);
+  const res=await aiCall('КБЖУ для: '+q,'food',my);
+  // пока ждали ответ, пользователь мог выбрать блюдо или начать новый поиск
+  if(my!==aiSeq)return;
   if(!res.ok){aiStatus('⚠️ '+res.err);return;}
   try{
     const txt=res.text.replace(/```json|```/g,'').trim();
     const parsed=JSON.parse(txt);
+    if(my!==aiSeq)return;
     const list=document.getElementById('aiList');
     list.innerHTML='';
     parsed.items.forEach(it=>{
@@ -602,7 +633,9 @@ async function doAiSearch(q){
       div.onclick=()=>{
         if(!S.food[today()])S.food[today()]=[];
         S.food[today()].push({n:it.n,g:it.g||'1 порция',k:it.k,p:it.p});
-        save();renderFood();toast('Добавлено: '+it.n);
+        save();renderFood();
+        clearFoodSearch();
+        toast('Добавлено: '+it.n);
       };
       list.appendChild(div);
     });
@@ -902,7 +935,7 @@ async function makeWeeklyReview(silent){
   }
   if(btn){btn.disabled=true;btn.textContent='Считаю итог…';}
   if(box)box.innerHTML='<span class="muted small">🤔 Тренер смотрит неделю… обычно 15–30 сек.</span>';
-  const res=await aiCall('Ниже данные недели в JSON. Разбери её по правилам.\n\n'+JSON.stringify(data.текст,null,1),null,null,'review');
+  const res=await aiCall('Ниже данные недели в JSON. Разбери её по правилам.\n\n'+JSON.stringify(data.текст,null,1),'review');
   if(btn){btn.disabled=false;btn.textContent='Сделать итог недели';}
   if(!res.ok){
     if(box)box.classList.remove('muted','small'),box.innerHTML='<span class="muted small">⚠️ '+esc(res.err)+'</span>';
@@ -996,7 +1029,7 @@ async function probeModels(){
   const found=[];
   for(const m of PROBE_MODELS){
     try{
-      const r=await aiCall('КБЖУ для: творог 5%',null,m);
+      const r=await aiCall('КБЖУ для: творог 5%','food');
       if(r.ok){
         S.settings.aiModel=m;save();
         st.textContent='✓ Рабочая модель: '+m+'. Запомнена — поиск еды теперь использует её.';
@@ -1023,31 +1056,38 @@ async function fetchTO(url,opts,ms){
 }
 /* Универсальный вызов Claude через воркер: страница -> воркер -> шлюз Nixway */
 const AI_TIMEOUT=55000;   // модель отвечает 15–25 сек, даём запас
-async function aiCall(userText, systemText, modelOverride, mode){
+async function aiCall(userText, mode, reqId){
   const base=aiWorkerUrl();
   if(!base)return {ok:false,err:'Не задан адрес воркера (Настройки → Claude AI)'};
   const key=aiKey();
   if(!key)return {ok:false,err:'Не введён API-ключ Nixway (Настройки → Claude AI)'};
+  // поиск еды получает собственный AbortController: его можно прервать, как только
+  // блюдо выбрано или начат новый запрос
+  let ctl=null;
+  if(mode==='food'&&reqId!==undefined){ctl=new AbortController();aiController=ctl;}
   try{
     const r=await fetchTO(base,{
       method:'POST',
       headers:{'content-type':'application/json','x-nixway-key':key},
+      signal:ctl?ctl.signal:undefined,
       body:JSON.stringify({
         q:String(userText),
         mode:mode||'food',
-        model:(modelOverride||S.settings.aiModel||AI_MODEL)
+        model:(S.settings.aiModel||AI_MODEL)
       })
     },AI_TIMEOUT);
     if(r.ok){
       const d=r.body;
       const txt=(d.content&&d.content[0]&&d.content[0].text)||'';
-      return {ok:true,text:txt,model:d.model||modelOverride||S.settings.aiModel||AI_MODEL};
+      return {ok:true,text:txt,model:d.model||S.settings.aiModel||AI_MODEL};
     }
     const e=r.body||{};
     const msg=(e.error&&(e.error.message||e.error.type))||(e.detail)||('HTTP '+r.status);
     return {ok:false,err:'Ответ '+r.status+': '+msg};
   }catch(e){
     return {ok:false,err:e.name==='AbortError'?'таймаут '+Math.round(AI_TIMEOUT/1000)+' сек — сервер не отвечает':e.message};
+  }finally{
+    if(ctl&&aiController===ctl)aiController=null;
   }
 }
 function saveSettings(){
