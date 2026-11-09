@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0f1115">
 <title>Форма — дневник тренировок</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230f1115'/%3E%3Cpath d='M22 56h12l8-22 10 40 8-26 6 8h12' fill='none' stroke='%2334d399' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
   :root{
     --bg:#0f1115; --surface:#191c23; --surface2:#22262f; --line:#2c313c;
@@ -53,10 +54,19 @@
   .vidratio iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
   @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
   .badge{display:inline-block;font-size:12px;padding:3px 10px;border-radius:12px;background:rgba(52,211,153,.15);color:var(--accent);margin-top:6px}
-  .sets{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-  .set{display:flex;flex-direction:column;align-items:center;background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-md);padding:8px 4px;flex:1;min-width:66px}
-  .set label{font-size:11px;color:var(--muted)}
-  .set input{width:100%;background:none;border:none;color:var(--text);text-align:center;font-size:17px;outline:none;min-height:30px}
+  /* подход — строка: «сет 1  [вес]  ×  [повторы]»; на узком экране
+     это читается лучше, чем четыре тесные колонки */
+  .sets{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  .set{display:grid;grid-template-columns:54px 1fr 12px 1fr;align-items:center;gap:6px;
+    background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-md);padding:6px 10px;min-width:0}
+  .set label{font-size:12px;color:var(--muted);white-space:nowrap}
+  .set .xx{font-size:14px;color:#5f6774;text-align:center}
+  /* padding:0 обязателен: общее правило input[type=number] задаёт 0 14px */
+  .set input[type=number]{width:100%;min-width:0;background:var(--surface);border:1px solid var(--line);
+    border-radius:9px;color:var(--text);text-align:center;font-size:16px;outline:none;
+    min-height:36px;padding:0;margin:0}
+  .set input[type=number]:focus{border-color:var(--accent)}
+  .set input[type=number]::placeholder{font-size:13px;color:#6d7787}
   /* кнопки и поля — одна высота 48px, один шрифт 16px (без iOS-зума) */
   .btn{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:#08110c;border:none;border-radius:var(--r-md);padding:0 18px;font-size:16px;font-weight:600;cursor:pointer;width:100%;min-height:var(--ctl-h)}
   .btn.secondary{background:var(--surface2);color:var(--text);border:1px solid var(--line)}
@@ -100,6 +110,22 @@
   .aicheck input:checked{background:var(--accent);border-color:var(--accent)}
   .aicheck input:checked::after{content:'';position:absolute;left:6px;top:2px;width:6px;height:11px;
     border:solid #08110c;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+  /* прошлая тренировка и подсказки */
+  .prow{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .prow:last-child{border-bottom:none}
+  .prow .n{font-size:14px;min-width:0}
+  .prow .k{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;flex:none}
+  .prow .k span{background:var(--surface2);border:1px solid var(--line);border-radius:8px;
+    padding:2px 7px;font-size:12.5px;color:#c6ccd8;white-space:nowrap}
+  .set .pv{grid-column:1/-1;font-size:11.5px;color:#6d7787;margin-top:-2px;padding-left:2px}
+  .set .pv.dim{opacity:.45}
+  /* итог недели */
+  .review{line-height:1.55;font-size:15px}
+  .review b{color:var(--accent);font-weight:600}
+  .review p{margin:0 0 10px}
+  .review ul{margin:0 0 10px;padding-left:20px}
+  .review li{margin-bottom:5px}
+  .review h4{margin:14px 0 6px;font-size:15px;color:var(--blue)}
   .dblist{max-height:240px;overflow-y:auto}
   .dbitem{padding:12px 4px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center;min-height:52px}
   .dbitem:last-child{border-bottom:none}
@@ -129,6 +155,7 @@
 <!-- ================= ТРЕНИРОВКИ ================= -->
 <section id="tab-workout" class="active">
   <div class="pills" id="dayPills"></div>
+  <div id="prevWeek" class="card" style="display:none"></div>
   <div id="workoutBody"></div>
   <div class="card">
     <button class="btn" onclick="saveWorkout()">Сохранить тренировку</button>
@@ -201,6 +228,12 @@
     <h3>История тренировок</h3>
     <div id="historyList"><div class="muted">Пока пусто.</div></div>
   </div>
+
+  <div class="card">
+    <h3>Итог недели с ИИ <span class="muted small">тренер + питание</span></h3>
+    <div id="reviewBody" class="review muted small">Здесь появится разбор недели: тренировки, еда, вес и что изменить. В субботу после сохранения тренировки итог приходит сам — или нажми кнопку ниже.</div>
+    <button class="btn secondary" id="reviewBtn" style="margin-top:10px" onclick="makeWeeklyReview()">Сделать итог недели</button>
+  </div>
 </section>
 
 <!-- ================= НАСТРОЙКИ ================= -->
@@ -262,20 +295,20 @@
 <div class="toast" id="toast"></div>
 
 <script>
-/* ================= ДАННЫЕ ПРОГРАММЫ (v2.1) ================= */
+/* ================= ДАННЫЕ ПРОГРАММЫ (v2.2 — только пол и гантели, без скамьи) ================= */
 const PROGRAM = {
   1:{title:'Понедельник — Верх A: грудь (жимы)', ex:[
     {id:'floorpress', n:'Жим гантелей лёжа на полу', u:'https://www.youtube.com/watch?v=8-_7q2qutk4', s:4, r:[8,10]},
     {id:'pullups', n:'Подтягивания прямым хватом', u:'https://www.youtube.com/watch?v=dYmMKmit4qI', s:3, r:[8,99], note:'максимум; пока мало — негативы 4–5 сек'},
     {id:'pushupw', n:'Отжимания с отягощением (рюкзак)', u:'https://www.youtube.com/watch?v=vO0ItS53Jno', s:3, r:[8,12]},
-    {id:'ohp', n:'Армейский жим гантелей сидя', u:'https://www.youtube.com/watch?v=V-_WtQzZgwM', s:3, r:[8,10]},
+    {id:'ohp', n:'Жим гантелей стоя над головой', u:'', s:3, r:[8,10], note:'стоя, скамья не нужна'},
     {id:'reardelt', n:'Разведения в наклоне (задняя дельта)', u:'https://www.youtube.com/watch?v=bXJ9aM-NCpE', s:3, r:[15,15]},
     {id:'curl', n:'Подъём на бицепс с супинацией', u:'https://www.youtube.com/watch?v=WZsf_lQCHWg', s:3, r:[10,12]},
     {id:'plank', n:'Планка на локтях', u:'https://www.youtube.com/watch?v=0JtBS11DGDk', s:3, r:[45,60], unit:'сек'}
   ]},
   3:{title:'Среда — Низ + кор', ex:[
     {id:'squat', n:'Приседания с гантелями', u:'https://www.youtube.com/watch?v=UIcvBlo5Iqg', s:4, r:[10,12]},
-    {id:'bulgarian', n:'Болгарские сплит-приседания', u:'https://www.youtube.com/watch?v=6fOOCDSV04k', s:3, r:[8,10], note:'на ногу'},
+    {id:'lunges', n:'Выпады с гантелями назад', u:'', s:3, r:[10,12], note:'поочерёдно, на ногу'},
     {id:'rdl', n:'Румынская тяга с гантелями', u:'https://www.youtube.com/watch?v=w8618QnyZi8', s:4, r:[10,12]},
     {id:'calves', n:'Подъёмы на носки стоя', u:'https://www.youtube.com/watch?v=rOQ9GjU8SWo', s:4, r:[15,20]},
     {id:'abwheel', n:'Колесо для пресса с колен', u:'https://www.youtube.com/watch?v=mRm0jWrNcRc', s:4, r:[8,10]},
@@ -284,11 +317,11 @@ const PROGRAM = {
   5:{title:'Пятница — Верх B: грудь (разводки) + плечи, руки', ex:[
     {id:'widepush', n:'Отжимания широким хватом', u:'https://www.youtube.com/watch?v=VJx7Ql80ec8', s:4, r:[8,12]},
     {id:'floorfly', n:'Разводки гантелей лёжа на полу', u:'https://www.youtube.com/watch?v=X2iQGqLgeBI', s:3, r:[10,12]},
-    {id:'pullover', n:'Пуловер с гантелью лёжа', u:'https://www.youtube.com/watch?v=LJhN8d7ZAPQ', s:3, r:[10,12]},
+    {id:'onerow', n:'Тяга гантели в наклоне одной рукой', u:'', s:3, r:[10,12], note:'опора — рука на колено или пол'},
     {id:'latraise', n:'Махи гантелями через стороны', u:'https://www.youtube.com/watch?v=Q3j7XYxrJtk', s:4, r:[12,15]},
     {id:'chinups', n:'Подтягивания обратным хватом', u:'https://www.youtube.com/watch?v=bF4T6-Mh0MU', s:3, r:[8,99], note:'максимум'},
     {id:'shrugs', n:'Шраги с гантелями', u:'https://www.youtube.com/watch?v=uKNhIageiWU', s:3, r:[12,15]},
-    {id:'skull', n:'Французский жим лёжа', u:'https://www.youtube.com/watch?v=9GBpsRgbxEg', s:3, r:[10,12]},
+    {id:'skull', n:'Французский жим лёжа на полу', u:'', s:3, r:[10,12], note:'лёжа на полу, локти вверх'},
     {id:'hammer', n:'Молотковые сгибания', u:'https://www.youtube.com/watch?v=k6VRiS8AY2o', s:3, r:[10,12]}
   ]}
 };
@@ -355,16 +388,22 @@ function switchTab(name,btn){
   document.getElementById('tab-'+name).classList.add('active');
   document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  if(name==='progress') renderProgress();
+  if(name==='progress'){renderProgress();restoreReview();}
   if(name==='food') renderFood();
+  if(name==='workout'){renderWorkout();renderPrevWeek();}
 }
 
 /* ================= ТРЕНИРОВКИ ================= */
 let curDay=(new Date().getDay()===1||new Date().getDay()===3||new Date().getDay()===5)?new Date().getDay():1;
 
 function lastEntry(exId){
-  const keys=Object.keys(S.workouts).sort().reverse();
-  for(const k of keys){const w=S.workouts[k];if(w.entries&&w.entries[exId]&&w.entries[exId].some(s=>s&&s.w))return{date:k,sets:w.entries[exId]};}
+  // только прошлые дни: сегодняшняя/черновая запись «прошлой» не считается
+  const t=today();
+  const keys=Object.keys(S.workouts).filter(k=>k<t).sort().reverse();
+  for(const k of keys){
+    const w=S.workouts[k];
+    if(w.entries&&w.entries[exId]&&w.entries[exId].some(s=>s&&s.w))return{date:k,sets:w.entries[exId]};
+  }
   return null;
 }
 function topReached(ex,sets){if(!sets)return false;const top=ex.r[1];if(top>=99)return false;return sets.every(s=>s&&+s.r>=top&&+s.w>0);}
@@ -379,56 +418,156 @@ function renderDayPills(){
 
 function renderWorkout(){
   const day=PROGRAM[curDay];const box=document.getElementById('workoutBody');
-  const wKey=today();const saved=S.workouts[wKey]&&S.workouts[wKey].day===curDay?S.workouts[wKey]:null;
-  let h='<div class="card"><h3>'+day.title+'</h3><div class="muted small">Разминка 5–7 мин: суставная гимнастика, растяжка грудных в проёме 2×30 сек, 10 лёгких отжиманий с паузой внизу.</div></div>';
+  // Ничего не создаём при простом просмотре: пустая запись не должна
+  // появляться в истории и в счётчике тренировок.
+  const wk=S.workouts[today()]||{};
+  const draft=(wk.draft&&wk.draft.day===curDay)?wk.draft:null;
+  // после «Сохранить тренировку» поля пустые, значения остаются только в истории
+  const saved=(wk.day===curDay&&wk.entries&&!wk.committed)?wk.entries:null;
+  let h='<div class="card"><h3>'+day.title+'</h3><div class="muted small">Разминка 5–7 мин: суставная гимнастика, наклоны и вращения корпуса, 10 лёгких отжиманий с паузой внизу.</div><div class="muted small" style="margin-top:6px">Вся программа — только с полом и гантелями. Серым в поле подхода показан результат с прошлой недели, его можно изменить.</div></div>';
   day.ex.forEach((ex,i)=>{
     const prev=lastEntry(ex.id);
     const badge=topReached(ex,prev&&prev.sets)?'<span class="badge">Прошлый раз — верх диапазона → +'+S.settings.step+' кг!</span>':'';
-    const vid=ex.u?ex.u.split('v=')[1]:null;
-    h+='<div class="card"><div class="ex"><div class="ex-top"><div class="ex-name">'+(i+1)+'. '+ex.n+(ex.note?'<div class="muted small">'+ex.note+'</div>':'')+badge+'</div>';
-    if(vid)h+='<button class="vidbtn" data-vid="'+ex.id+'">▶ видео</button>';
+    h+='<div class="card" data-card="'+ex.id+'"><div class="ex"><div class="ex-top"><div class="ex-name">'+(i+1)+'. '+ex.n+(ex.note?'<div class="muted small">'+ex.note+'</div>':'')+badge+'</div>';
     h+='</div><div class="muted small">'+ex.s+' × '+ex.r[0]+(ex.r[1]>=99?'':('–'+ex.r[1]))+(ex.unit||' повторов')+'</div>';
-    if(vid)h+='<div class="vidwrap" id="vid-'+ex.id+'" style="display:none"><div class="vidratio"><iframe data-src="https://www.youtube-nocookie.com/embed/'+vid+'" allowfullscreen loading="lazy"></iframe></div></div>';
     h+='<div class="sets">';
     for(let s=0;s<ex.s;s++){
       const pv=prev&&prev.sets[s]?prev.sets[s]:null;
-      const ph=pv&&pv.w?('пр: '+pv.w+'×'+pv.r):'вес';
-      const phR=pv&&pv.r?'пр: '+pv.r:'повт';
-      const val=saved&&saved.entries[ex.id]&&saved.entries[ex.id][s]?saved.entries[ex.id][s]:{};
-      h+='<div class="set"><label>сет '+(s+1)+'</label><input type="number" inputmode="decimal" step="0.5" placeholder="'+ph+'" data-ex="'+ex.id+'" data-s="'+s+'" data-f="w" value="'+(val.w||'')+'"><input type="number" inputmode="numeric" placeholder="'+phR+'" data-ex="'+ex.id+'" data-s="'+s+'" data-f="r" value="'+(val.r||'')+'"></div>';
+      // компактно, чтобы помещалось в узкую колонку сета на телефоне
+      const ph=pv&&pv.w?('пр '+pv.w):'вес';
+      const phR=pv&&pv.r?('пр '+pv.r):'повт';
+      const cur=(draft&&draft.entries&&draft.entries[ex.id]&&draft.entries[ex.id][s])||
+                (saved&&saved[ex.id]&&saved[ex.id][s])||{};
+      h+='<div class="set"><label>сет '+(s+1)+'</label>'+
+        '<input type="number" inputmode="decimal" step="0.5" placeholder="'+ph+'" data-ex="'+ex.id+'" data-s="'+s+'" data-f="w" value="'+(cur.w||'')+'" oninput="onSetInput(this)">'+
+        '<span class="xx">×</span>'+
+        '<input type="number" inputmode="numeric" placeholder="'+phR+'" data-ex="'+ex.id+'" data-s="'+s+'" data-f="r" value="'+(cur.r||'')+'" oninput="onSetInput(this)">'+
+        '</div>';
     }
-    h+='</div></div></div>';
+    h+='</div>';
+    // видео грузим только по нажатию — иначе встроенный плеер ест память и мешает вводу
+    if(ex.u)h+='<div class="vidwrap" id="vid-'+ex.id+'" style="display:none"></div><button class="vidbtn" data-vid="'+ex.id+'" data-u="'+ex.u+'">▶ видео</button>';
+    h+='</div></div>';
   });
   box.innerHTML=h;
   document.querySelectorAll('.vidbtn').forEach(b=>{
     b.onclick=()=>{
       const wrap=document.getElementById('vid-'+b.dataset.vid);
       const open=wrap.style.display!=='none';
-      // закрыть все остальные
-      document.querySelectorAll('.vidwrap').forEach(w=>{if(w!==wrap){w.style.display='none';const f=w.querySelector('iframe');if(f&&f.src)f.src='';}});
+      document.querySelectorAll('.vidwrap').forEach(w=>{if(w!==wrap)w.style.display='none';});
+      if(!open&&!wrap.innerHTML){
+        const vid=b.dataset.u.split('v=')[1];
+        wrap.innerHTML='<div class="vidratio"><iframe src="https://www.youtube-nocookie.com/embed/'+vid+'" allowfullscreen loading="lazy"></iframe></div>';
+      }
       wrap.style.display=open?'none':'block';
-      if(!open){const f=wrap.querySelector('iframe');if(f&&!f.src)f.src=f.dataset.src;}
       b.textContent=open?'▶ видео':'✕ закрыть';
     };
   });
-  document.getElementById('saveMsg').textContent='';
+  document.getElementById('saveMsg').textContent=draft&&hasAny(draft.entries)?'Черновик сохраняется сам — можно уходить с вкладки.' : '';
+  renderPrevWeek();
 }
 
-function saveWorkout(){
+/* «7 дней назад» = та же тренировка на прошлой неделе */
+function dkeyMinus(days){
+  const d=new Date();d.setDate(d.getDate()-days);
+  return dkey(d);
+}
+function lastWeekWorkout(dayNum){
+  const target=dkeyMinus(7),day=PROGRAM[dayNum];
+  if(!day)return null;
+  const w=S.workouts[target];
+  if(w&&w.day===dayNum&&hasAny(w.entries))return{date:w,label:'прошлая неделя, '+niceDate(target)};
+  // если ровно неделю назад не тренировался — берём последнюю в пределах 14 дней
+  for(let back=1;back<=14;back++){
+    const k=dkeyMinus(7+back);const x=S.workouts[k];
+    if(x&&x.day===dayNum&&hasAny(x.entries))return{date:x,label:'последняя, '+niceDate(k)};
+  }
+  return null;
+}
+function renderPrevWeek(){
+  const box=document.getElementById('prevWeek');
+  if(!box)return;
+  const found=lastWeekWorkout(curDay);
+  if(!found){box.style.display='none';box.innerHTML='';return;}
+  const day=PROGRAM[curDay];
+  let rows='';
+  day.ex.forEach(ex=>{
+    const sets=(found.date.entries[ex.id]||[]).filter(s=>s&&(s.w||s.r));
+    if(!sets.length)return;
+    // тело без веса (подтягивания, отжимания) показываем как «× 7», а не «0 кг × 7»
+    rows+='<div class="prow"><div class="n">'+esc(ex.n)+'</div><div class="k">'+
+      sets.map(s=>{
+        const w=+s.w||0, r=s.r||'';
+        const ws=w>0?(w+(ex.unit==='сек'?' с':' кг')):'';
+        if(!ws&&!r)return '';
+        return '<span>'+[ws,r?('× '+r):''].filter(Boolean).join(' ')+'</span>';
+      }).join('')+
+      '</div></div>';
+  });
+  if(!rows){box.style.display='none';box.innerHTML='';return;}
+  box.style.display='block';
+  box.innerHTML='<h3>В прошлый раз <span class="muted small">('+found.label.replace(/^прошлая неделя,\s*/,'')+')</span></h3>'+rows;
+}
+
+/* есть ли хоть одно заполненное поле */
+function hasAny(entries){
+  if(!entries)return false;
+  return Object.values(entries).some(sets=>sets&&sets.some(s=>s&&(s.w||s.r)));
+}
+/* читает все поля текущего дня в объект entries */
+function collectEntries(){
   const day=PROGRAM[curDay];const entries={};
   day.ex.forEach(ex=>{
     const sets=[];
     for(let s=0;s<ex.s;s++){
       const w=document.querySelector('[data-ex="'+ex.id+'"][data-s="'+s+'"][data-f="w"]');
       const r=document.querySelector('[data-ex="'+ex.id+'"][data-s="'+s+'"][data-f="r"]');
-      sets.push({w:w.value||'',r:r.value||''});
+      sets.push({w:w?w.value||'':'',r:r?r.value||'':''});
     }
     entries[ex.id]=sets;
   });
-  S.workouts[today()]={day:curDay,entries:entries};save();
-  const done=Object.values(entries).some(sets=>sets.some(s=>s.w||s.r));
-  document.getElementById('saveMsg').textContent=done?'✓ Сохранено, молодец!':'Пусто — заполни хотя бы одно упражнение.';
-  if(done)toast('Тренировка сохранена ✓');
+  return entries;
+}
+/* главное исправление: каждое изменение поля сразу пишется в localStorage,
+   поэтому переход на «Еду»/«Настройки» или выход из приложения ничего не теряет */
+let autoSaveTimer=null;
+function onSetInput(inp){
+  // плейсхолдер «пр: N» гасим, как только пользователь начал вводить
+  const key=today();
+  if(!S.workouts[key])S.workouts[key]={day:curDay,entries:{},draft:{}};
+  const wk=S.workouts[key];
+  if(!wk.draft||wk.draft.day!==curDay)wk.draft={day:curDay,entries:{}};
+  const exId=inp.dataset.ex,si=+inp.dataset.s;
+  if(!wk.draft.entries[exId])wk.draft.entries[exId]=[];
+  const prev=wk.draft.entries[exId][si]||{};
+  const val={w:prev.w||'',r:prev.r||''};
+  val[inp.dataset.f]=inp.value;
+  wk.draft.entries[exId][si]=val;
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer=setTimeout(()=>{
+    save();
+    const msg=document.getElementById('saveMsg');
+    if(msg)msg.textContent='✓ Сохранено автоматически ('+new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+')';
+  },350);
+}
+
+function saveWorkout(){
+  const entries=collectEntries();
+  const key=today();
+  const done=hasAny(entries);
+  const msg=document.getElementById('saveMsg');
+  if(!done){msg.textContent='Пусто — заполни хотя бы одно упражнение.';return;}
+  // committed=true: значения ушли в историю, а поля при следующем открытии пустые
+  S.workouts[key]={day:curDay,entries:entries,committed:true};
+  save();
+  // поля очищаем сразу, не дожидаясь перерисовки
+  document.querySelectorAll('#workoutBody input[data-ex]').forEach(i=>{i.value='';});
+  renderWorkout();
+  const m2=document.getElementById('saveMsg');
+  if(m2)m2.textContent='✓ Тренировка сохранена, поля очищены.';
+  toast('Тренировка сохранена ✓');
+  // если сегодня суббота — итог недели с ИИ
+  maybeWeeklyReview();
 }
 
 /* ================= ЕДА ================= */
@@ -450,7 +589,7 @@ let aiTimer=null,aiController=null;
 function aiSearch(q){clearTimeout(aiTimer);aiTimer=setTimeout(()=>doAiSearch(q),700);}
 async function doAiSearch(q){
   aiStatus('🤔 Спрашиваю Claude про «'+q+'»…');
-  const res=await aiCall(q);
+  const res=await aiCall('КБЖУ для: '+q);
   if(!res.ok){aiStatus('⚠️ '+res.err);return;}
   try{
     const txt=res.text.replace(/```json|```/g,'').trim();
@@ -636,6 +775,165 @@ function renderExChart(){
   hint.textContent=ex&&ex.r[1]<99?('Цель: все подходы по '+ex.r[1]+' повторов → +'+S.settings.step+' кг.'):'';
 }
 
+/* ================= ИТОГ НЕДЕЛИ С ИИ ================= */
+/* Неделя = последние 7 дней включая сегодня. Собираем компактный факт-дамп:
+   тренеру нужно не «всё», а цифры — иначе промпт огромный и ответ размытый. */
+function weekRange(days){
+  const out=[];
+  for(let i=days-1;i>=0;i--)out.push(dkeyMinus(i));
+  return out;
+}
+function buildWeekSummary(){
+  const days=weekRange(7);
+  const sum={
+    workouts:[], kcal:[], prot:[], bw:[],
+    daysTracked:0, daysEaten:0, daysKcalOver:0, daysProtMet:0
+  };
+
+  // --- тренировки ---
+  days.forEach(k=>{
+    const w=S.workouts[k];
+    if(!w||!w.entries||!hasAny(w.entries))return;
+    const day=PROGRAM[w.day];
+    const ex=[];
+    (day?day.ex:[]).forEach(e=>{
+      const sets=(w.entries[e.id]||[]).filter(s=>s&&(s.w||s.r));
+      if(!sets.length)return;
+      ex.push({
+        имя:e.n,
+        подходы:sets.map(s=>(s.w?+s.w:0)+'×'+(s.r?+s.r:0)).join(', '),
+        лучший_вес:Math.max(...sets.map(s=>+s.w||0))
+      });
+    });
+    if(ex.length)sum.workouts.push({дата:k,день:day?day.title.split('—')[0].trim():'?',упражнения:ex});
+  });
+
+  // --- еда ---
+  days.forEach(k=>{
+    const list=S.food[k];
+    if(!list||!list.length)return;
+    let kcal=0,prot=0;
+    list.forEach(f=>{
+      const grams=(f.grams!==undefined?+f.grams:null);
+      if(grams!==null&&grams>0){kcal+=f.k*grams/100;prot+=f.p*grams/100;}
+      else{kcal+=+f.k||0;prot+=+f.p||0;}
+    });
+    sum.daysEaten++;
+    const goalK=+S.settings.kcal||3200, goalP=+S.settings.prot||135;
+    if(kcal>goalK*1.05)sum.daysKcalOver++;
+    if(prot>=goalP*0.9)sum.daysProtMet++;
+    sum.kcal.push({дата:k,ккал:Math.round(kcal),белок:Math.round(prot)});
+  });
+
+  // --- вес ---
+  S.bodyweight.filter(b=>days.includes(b.d)).forEach(b=>sum.bw.push({дата:b.d,вес:+b.v}));
+  sum.daysTracked=sum.daysEaten;
+
+  const avg=(arr,key)=>arr.length?Math.round(arr.reduce((a,b)=>a+ (+b[key]||0),0)/arr.length):0;
+  const goalK=+S.settings.kcal||3200, goalP=+S.settings.prot||135;
+  return {
+    текст:{
+      период:days[0]+' … '+days[days.length-1],
+      цель_ккал:goalK, цель_белок_г:goalP,
+      цель_вес_кг:S.settings.goal,
+      шаг_прогрессии_кг:S.settings.step,
+      тренировок_за_неделю:sum.workouts.length,
+      дней_с_едой_записано:sum.daysEaten,
+      средние_ккал_в_день_питания:avg(sum.kcal,'ккал'),
+      средний_белок_в_день_питания:avg(sum.kcal,'белок'),
+      дней_с_двумя_и_более_записями_еды:(function(){
+        let n=0;
+        days.forEach(k=>{const l=S.food[k];if(l&&l.length>=2)n++;});
+        return n;
+      })(),
+      дней_перебора_ккал:sum.daysKcalOver,
+      дней_с_нормой_белка:sum.daysProtMet,
+      вес_в_начале_недели:sum.bw.length?sum.bw[0].вес:null,
+      вес_в_конце_недели:sum.bw.length?sum.bw[sum.bw.length-1].вес:null,
+      взвешиваний_за_неделю:sum.bw.length,
+      тренировки:sum.workouts,
+      дневник_еды:sum.kcal,
+      замеры_веса:sum.bw
+    },
+    empty:sum.workouts.length===0&&sum.daysEaten===0
+  };
+}
+
+const WEEKLY_SYS='Ты — тренер по силовым тренировкам и питанию. Сначала ответь ОДНИМ абзацем (2–3 предложения) — самое главное за неделю и вердикт: двигаемся дальше или что-то меняем. Затем раздел КАК СОБРАН: 1–3 пункта конкретных действий на следующую неделю с цифрами. Затем разделы СИЛОВЫЕ и ПИТАНИЕ и ВЕС: по 2–3 наблюдения с цифрами. В конце одна короткая строка ВНИМАНИЕ, только если есть реальный риск (резкое падение веса, пропуски, сильный перебор). Без воды, без похвалы ради похвалы. Пиши по-русски, обычным текстом: можно **выделять** цифры и названия упражнений двойными звёздочками. Не выдумывай упражнения, которых нет в данных. Если каких-то данных нет — скажи прямо и не заменяй их догадками.';
+
+function renderReview(text,meta){
+  const box=document.getElementById('reviewBody');
+  if(!box)return;
+  const esc2=s=>esc(s);
+  const fmt=s=>esc2(s)
+    .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+    .replace(/^###\s*(.+)$/gm,'<h4>$1</h4>')
+    .replace(/^##\s*(.+)$/gm,'<h4>$1</h4>')
+    .replace(/^#\s*(.+)$/gm,'<h4>$1</h4>')
+    .replace(/^\s*[-*•]\s+(.+)$/gm,'<li>$1</li>')
+    .replace(/(<li>.*<\/li>)/s,'<ul>$1</ul>')
+    .split(/\n{2,}/).map(p=>{
+      const t=p.trim();
+      if(!t)return '';
+      if(/^<(ul|h4)/.test(t))return t;
+      return '<p>'+t.replace(/\n/g,' ')+'</p>';
+    }).join('');
+  box.classList.remove('muted','small');
+  box.dataset.shown='1';
+  box.innerHTML=fmt(text);
+  if(meta)box.innerHTML+='<div class="muted small" style="margin-top:10px">'+esc2(meta)+'</div>';
+  const k='review_'+dkeyMinus(6);
+  S.weeklyReview={week:k,text:text,meta:meta,at:Date.now()};
+  save();
+}
+
+async function makeWeeklyReview(silent){
+  const box=document.getElementById('reviewBody');
+  const btn=document.getElementById('reviewBtn');
+  if(!aiWorkerUrl()||!aiKey()){
+    if(!silent)toast('Сначала настрой Claude AI в Настройках');
+    if(box)box.innerHTML='<span class="muted small">Для итога нужен настроенный Claude AI (Настройки → Claude AI): адрес воркера и ключ.</span>';
+    return;
+  }
+  const data=buildWeekSummary();
+  if(data.empty){
+    if(!silent){box.classList.remove('muted','small');box.innerHTML='<span class="muted small">За неделю нет ни тренировок, ни записанной еды — разбирать пока нечего.</span>';}
+    return;
+  }
+  if(btn){btn.disabled=true;btn.textContent='Считаю итог…';}
+  if(box)box.innerHTML='<span class="muted small">🤔 Тренер смотрит неделю… обычно 15–30 сек.</span>';
+  const res=await aiCall('Ниже данные недели в JSON. Разбери её по правилам.\n\n'+JSON.stringify(data.текст,null,1),null,null,'review');
+  if(btn){btn.disabled=false;btn.textContent='Сделать итог недели';}
+  if(!res.ok){
+    if(box)box.classList.remove('muted','small'),box.innerHTML='<span class="muted small">⚠️ '+esc(res.err)+'</span>';
+    if(!silent)toast('Итог не получился: '+res.err);
+    return;
+  }
+  const per=data.текст;
+  const meta='Неделя '+per.период+' · тренировок: '+per.тренировок_за_неделю+' · дней с едой: '+per.дней_с_едой_записано+'/'+7+' · модель: '+(res.model||'—');
+  renderReview(res.text,meta);
+}
+
+/* сохранённый итог показываем при открытии «Прогресса», без повторного запроса */
+function restoreReview(){
+  const box=document.getElementById('reviewBody');
+  if(!box)return;
+  const r=S.weeklyReview;
+  if(!r||!r.text)return;
+  if(box.dataset.shown==='1')return;
+  renderReview(r.text,r.meta);
+  box.dataset.shown='1';
+}
+
+/* В субботу после сохранения тренировки итог приходит сам — один раз на неделю */
+function maybeWeeklyReview(){
+  if(new Date().getDay()!==6)return;   // 6 = суббота
+  const week=dkeyMinus(6);
+  if(S.weeklyReview&&S.weeklyReview.week===week)return;
+  if(!aiWorkerUrl()||!aiKey())return;
+  setTimeout(()=>makeWeeklyReview(true),400);
+}
+
 /* ================= ВЕС ================= */
 function addBodyweight(){
   const v=+document.getElementById('bwInput').value;
@@ -698,7 +996,7 @@ async function probeModels(){
   const found=[];
   for(const m of PROBE_MODELS){
     try{
-      const r=await aiCall('творог 5%',null,m);
+      const r=await aiCall('КБЖУ для: творог 5%',null,m);
       if(r.ok){
         S.settings.aiModel=m;save();
         st.textContent='✓ Рабочая модель: '+m+'. Запомнена — поиск еды теперь использует её.';
@@ -725,7 +1023,7 @@ async function fetchTO(url,opts,ms){
 }
 /* Универсальный вызов Claude через воркер: страница -> воркер -> шлюз Nixway */
 const AI_TIMEOUT=55000;   // модель отвечает 15–25 сек, даём запас
-async function aiCall(userText, systemText, modelOverride){
+async function aiCall(userText, systemText, modelOverride, mode){
   const base=aiWorkerUrl();
   if(!base)return {ok:false,err:'Не задан адрес воркера (Настройки → Claude AI)'};
   const key=aiKey();
@@ -735,7 +1033,8 @@ async function aiCall(userText, systemText, modelOverride){
       method:'POST',
       headers:{'content-type':'application/json','x-nixway-key':key},
       body:JSON.stringify({
-        q:String(userText).replace(/^КБЖУ для:\s*/,''),
+        q:String(userText),
+        mode:mode||'food',
         model:(modelOverride||S.settings.aiModel||AI_MODEL)
       })
     },AI_TIMEOUT);
